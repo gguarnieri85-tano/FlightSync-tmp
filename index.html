@@ -1996,7 +1996,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '1.97';
+const APP_VERSION = '1.98';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return !!(SUPABASE_URL && SUPABASE_KEY); }
@@ -5980,6 +5980,10 @@ function proposeShift(name, iso, code, fromDistro){
   if(leader || (approved && fromDistro)) PREFS.calReq=calRequests().filter(r=>!(r.iso===iso && sameIp(r.ip, ip)));
   else PREFS.calReq=calRequests().filter(r=>!(r.status==='pending' && r.iso===iso && sameIp(r.ip, ip)));
   PREFS.calReq.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5), ip, iso, code:String(code||'').toUpperCase(), status:approved?'approved':'pending', ts:Date.now()});
+  if(approved && !String(code||'').trim()){
+    const k=normIp(name)+'|'+iso;
+    if(PREFS.distroCell && PREFS.distroCell[k]){ delete PREFS.distroCell[k]; savePref('distroCell'); }
+  }
   logCal(approved?(fromDistro&&!leader?'set':'approved'):'requested', ip, iso, code, calActor());
   afterCalChange();
   if(isCalOnly()){
@@ -7315,17 +7319,18 @@ function individualYearHtml(year, name){
       const eff=effectiveShift(name, iso, baseShiftOf(name, iso));
       const pend=latestReq(name, iso, 'pending');
       const appr=latestReq(name, iso, 'approved');
+      const hasAppr=!!(appr && appr.code);
       const show=pend?pend.code:eff;
       const bucket=shiftBucket(show);
       if(tot[bucket]!=null) tot[bucket]++;
       if(pend) waiting++;
-      if(appr) approved++;
+      if(hasAppr) approved++;
       const hol=dayMark(iso)==='HOL';
       if(dow>=1 && dow<=5 && !hol && !abs.has(bucket)) presence++;
       const mk=dayMark(iso);
       const lab2=mkName(mk);
-      const dot=pend?'<i class="dot r" title="Waiting approval"></i>':(appr?'<i class="dot g" title="Approved"></i>':'');
-      const flag=(!pend && appr)?' okd':'';
+      const dot=pend?'<i class="dot r" title="Waiting approval"></i>':(hasAppr?'<i class="dot g" title="Approved"></i>':'');
+      const flag=(!pend && hasAppr)?' okd':'';
       const rej=rejectedReq(name, iso);
       const moon=mk==='NIGHT'?'☾':'';
       cells+='<div class="ios-cell tc-cell '+wk+today+' '+toneOf(show)+flag+'" data-ip="'+esc(name)+'" data-iso="'+iso+'" title="'+esc(iso+' '+wdN[dow]+' '+(show||'')+(lab2?' '+lab2:'')+(rej?' rejected':''))+'"><span class="n">'+moon+d+'</span><span class="tc-wd">'+wdN[dow]+'</span>'+(show?'<span class="cd">'+esc(codeLabel(show))+'</span>':'')+(rej?'<span class="rej" title="Rejected. The day is clear. You can request again.">⚠</span>':'')+(lab2 && mk!=='NIGHT'?'<span class="tc-mk '+mk+'">'+esc(lab2)+'</span>':'')+dot+'</div>';
