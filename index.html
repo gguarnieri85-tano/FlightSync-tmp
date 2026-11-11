@@ -655,6 +655,7 @@ html.dark .ifts .wknd,html.dark .c-off{background:#1c1c1e}
 
   <button class="tab nav-app active" data-view="dashboard"><span class="ti">▣</span>Dashboard</button>
   <button class="tab" data-view="teamcal"><span class="ti">☾</span>Team Calendar</button>
+  <button class="tab" id="signOutBtn" type="button"><span class="ti">↩</span>Sign out</button>
   <button class="tab nav-app" data-view="personal"><span class="ti">👤</span>Personal</button>
   <button class="tab nav-app" data-view="day"><span class="ti">⏱</span>DFS check</button>
   <button class="tab nav-app" data-view="balance"><span class="ti">⚖</span>DFS BALANCE</button>
@@ -666,7 +667,6 @@ html.dark .ifts .wknd,html.dark .c-off{background:#1c1c1e}
   <div class="nav-group nav-app">Team Calendar data</div>
   <button class="tab nav-app" data-view="planning"><span class="ti">🗓</span>Week Distro</button>
   <button class="tab nav-app" data-view="silef"><span class="ti">◎</span>Currencies</button>
-  <button class="tab" id="signOutBtn" type="button"><span class="ti">↩</span>Sign out</button>
 </nav>
 <div class="shell">
 <div class="appbar">
@@ -1995,7 +1995,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '1.95';
+const APP_VERSION = '1.96';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return !!(SUPABASE_URL && SUPABASE_KEY); }
@@ -7715,7 +7715,11 @@ function applyRoleNav(){
   document.body.classList.toggle('role-cal', cal);
   $$('.nav-stats').forEach(el=>{ el.style.display=(leader && !cal)?'':'none'; });
   $$('.nav-app').forEach(el=>{ el.style.display=cal?'none':''; });
-  $$('#sideNav .tab').forEach(el=>{ if(cal && el.dataset.view!=='teamcal') el.style.display='none'; else if(!cal && el.classList.contains('nav-app')) el.style.display=''; });
+  $$('#sideNav .tab').forEach(el=>{
+    if(el.id==='signOutBtn'){ el.style.display=''; return; }
+    if(cal && el.dataset.view!=='teamcal') el.style.display='none';
+    else if(!cal && el.classList.contains('nav-app')) el.style.display='';
+  });
   $$('.bar-ops').forEach(el=>{ el.style.display=cal?'none':''; });
   const dbBtn=$('#importDbBtn');
   if(dbBtn) dbBtn.style.display=cal?'none':'';
