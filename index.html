@@ -697,7 +697,7 @@ html.dark .ifts .wknd,html.dark .c-off{background:#1c1c1e}
       <div class="controls">
         <button class="btn mini" id="dashUploadDb" type="button">↑ Upload old database</button>
         <button class="btn mini" id="dashDownloadDb" type="button">↓ Download database</button>
-        <button class="btn mini" id="dashResetDb" type="button">Reset Supabase</button>
+        <button class="btn mini" id="dashResetDb" type="button" style="display:none">Reset Supabase</button>
       </div>
       <input type="file" id="dashDbFile" accept="application/json,.json" hidden>
     </div>
@@ -911,6 +911,7 @@ html.dark .ifts .wknd,html.dark .c-off{background:#1c1c1e}
     <div id="tcDirty" class="dirty-bar" style="display:none"></div>
     <div class="controls">
       <button class="btn mini" id="tcChangeIp" type="button" style="display:none">Change instructor</button>
+      <button class="btn mini" id="tcSave" type="button" style="display:none">Save changes</button>
       <button class="btn mini" id="tcLock" type="button" style="display:none" title="Lock or unlock this month">🔓</button>
       <div class="seg" id="tcCat">
         <button type="button" data-cat="all" class="on">All</button>
@@ -1997,7 +1998,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.00';
+const APP_VERSION = '2.01';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return !!(SUPABASE_URL && SUPABASE_KEY); }
@@ -2157,6 +2158,11 @@ function scheduleCloudSave(){
   if(!cloudOn() || !isUnlocked()) return;
   clearTimeout(cloudTimer);
   cloudTimer=setTimeout(()=>{ cloudTimer=null; saveSnapshot({full:true, quiet:true}); }, 700);
+}
+async function saveFromFlag(){
+  await saveSnapshot({full:true});
+  TC_DIRTY=false; DB_DIRTY=false;
+  paintSaveFlag();
 }
 function savePref(k){
   const v=(k==='focus'||k==='acs'||k==='simRole'||k==='revExclude'||k==='hidden')?[...PREFS[k]]:PREFS[k];
@@ -5908,6 +5914,8 @@ function toggleMonthLock(ym){
   PREFS.monthLock=PREFS.monthLock||{};
   if(PREFS.monthLock[ym]) delete PREFS.monthLock[ym]; else PREFS.monthLock[ym]=true;
   savePref('monthLock');
+  TC_DIRTY=true;
+  scheduleCloudSave();
   const on=id=>$(id)&&$(id).classList.contains('active');
   if(on('#view-teamcal')) renderTeamCal();
   if(on('#view-planning')) renderIfts();
@@ -7104,9 +7112,10 @@ function renderTeamCal(){
   paintSaveFlag();
   const markBar=$('#tcMark');
   if(markBar) markBar.style.display=(canMarkDays() && !isCalOnly() && TC_VIEW==='team')?'':'none';
-  const lockBtn=$('#tcLock'), catSeg=$('#tcCat');
+  const lockBtn=$('#tcLock'), catSeg=$('#tcCat'), saveBtn=$('#tcSave');
   if(lockBtn){ lockBtn.style.display=(!isCalOnly() && isAdmin())?'':'none'; lockBtn.textContent=lockGlyph(TC_YM)+' '+(monthLocked(TC_YM)?'Locked':'Open'); }
   if(catSeg){ catSeg.style.display=isCalOnly()?'none':''; $$('#tcCat button').forEach(b=>b.classList.toggle('on', b.dataset.cat===TC_CAT)); }
+  if(saveBtn) saveBtn.style.display=isCalOnly()?'none':'';
   if(dirty){
     dirty.style.display='none';
   }
@@ -7169,20 +7178,6 @@ function renderTeamCal(){
     return;
   }
   if(title) title.textContent=new Date(yy,mm-1,1).toLocaleString('en-GB',{month:'long', year:'numeric'})+' '+lockGlyph(TC_YM);
-  const pendingTeam=calRequests().filter(r=>r.status==='pending').sort((a,b)=>(a.iso||'').localeCompare(b.iso||'')||a.ip.localeCompare(b.ip));
-  if(isAdmin()){
-    h+='<h2 class="sec">Waiting for approval</h2>';
-    if(!pendingTeam.length) h+='<p class="hint">No requests.</p>';
-    else {
-      h+='<div class="silef-tbl"><table><thead><tr><th class="nm">Instructor</th><th>Day</th><th>Requested</th><th></th></tr></thead><tbody>';
-      pendingTeam.forEach(r=>{
-        h+=`<tr><td class="nm">${esc(r.ip)}</td><td>${esc(r.iso)}</td><td class="${toneOf(r.code)}">${esc(codeLabel(r.code)||'clear')}</td><td><button type="button" class="btn mini" data-ok="${esc(r.id)}">Approve</button> <button type="button" class="btn mini subtle" data-no="${esc(r.id)}">Reject</button></td></tr>`;
-      });
-      h+='</tbody></table></div>';
-    }
-  } else if(pendingTeam.length){
-    h+=`<p class="hint">${pendingTeam.length} request${pendingTeam.length>1?'s':''} waiting for Team Leader.</p>`;
-  }
   const dim=new Date(yy, mm, 0).getDate();
   h+='<div class="tc-wrap"><table class="tc"><thead><tr><th class="nm">Instructor</th>';
   for(let day=1;day<=dim;day++){
@@ -7233,6 +7228,18 @@ function renderTeamCal(){
     h+=`<td>${a}/${b}/${c}<div class="dh">${bits.join('<br>')}</div></td>`;
   }
   h+='</tr></tbody></table></div>';
+  const pendingMonth=calRequests().filter(r=>r.status==='pending' && String(r.iso||'').startsWith(TC_YM)).sort((a,b)=>(a.iso||'').localeCompare(b.iso||'')||a.ip.localeCompare(b.ip));
+  if(isAdmin()){
+    h+='<h2 class="sec">Waiting for approval · '+esc(TC_YM)+'</h2>';
+    if(!pendingMonth.length) h+='<p class="hint">No requests this month.</p>';
+    else {
+      h+='<div class="silef-tbl"><table><thead><tr><th class="nm">Instructor</th><th>Day</th><th>Requested</th><th></th></tr></thead><tbody>';
+      pendingMonth.forEach(r=>{
+        h+=`<tr><td class="nm">${esc(r.ip)}</td><td>${esc(r.iso)}</td><td class="${toneOf(r.code)}">${esc(codeLabel(r.code)||'clear')}</td><td><button type="button" class="btn mini" data-ok="${esc(r.id)}">Approve</button> <button type="button" class="btn mini subtle" data-no="${esc(r.id)}">Reject</button></td></tr>`;
+      });
+      h+='</tbody></table></div>';
+    }
+  }
   h+=annualBlock(yy);
   h+=calLogHTML();
   body.innerHTML=h;
@@ -7246,6 +7253,8 @@ function bindTeamCalClicks(){
     if(!TC_MARK || PREFS.dayMarks[iso]===TC_MARK) delete PREFS.dayMarks[iso];
     else PREFS.dayMarks[iso]=TC_MARK;
     savePref('dayMarks');
+    TC_DIRTY=true;
+    scheduleCloudSave();
     renderTeamCal();
     if(!isCalOnly()) touchCalendardb();
   });
@@ -7870,6 +7879,7 @@ const signOutBtn=$('#signOutBtn'); if(signOutBtn) signOutBtn.onclick=async()=>{
   lockApp('');
 };
 window.addEventListener('beforeunload', e=>{ if(pendingSave()){ e.preventDefault(); e.returnValue=''; } });
+const tcSave=$('#tcSave'); if(tcSave) tcSave.onclick=()=>saveFromFlag();
 const tcLock=$('#tcLock');
 if(tcLock) tcLock.onclick=()=>toggleMonthLock(TC_YM);
 const tcCat=$('#tcCat');
