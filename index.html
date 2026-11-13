@@ -623,8 +623,8 @@ html.dark .ifts th{background:#2c2c2e} html.dark .ifts th.nm{background:#2c2c2e}
 .tc{border-collapse:collapse;font-size:10px;min-width:100%}
 .tc th,.tc td{border:1px solid var(--line);padding:2px 3px;text-align:center;min-width:26px}
 .tc th.nm,.tc td.nm{position:sticky;left:0;z-index:1;text-align:left;min-width:108px;background:var(--card);font-weight:700}
-.tc .wknd{background:#f2f2f7}
-html.dark .tc .wknd{background:#1c1c1e}
+.tc .wknd,.tc th.feria,.tc td.feria{background:#d5d5dc;color:#666}
+html.dark .tc .wknd,html.dark .tc th.feria,html.dark .tc td.feria{background:#2a2a30;color:#aaa}
 .tc .dh{font-size:9px;font-weight:800;letter-spacing:.2px}
 .tc-req{display:block;font-size:9px;color:#8a6500}
 .tc-legend{display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--muted-t);margin:6px 0}
@@ -929,13 +929,14 @@ html.dark .ifts .wknd,html.dark .c-off{background:#1c1c1e}
       <button class="btn mini" id="tcPrint" type="button">Print year</button>
       <button class="btn mini" id="tcIcs" type="button" style="display:none">Export calendar</button>
     </div>
-    <div class="seg" id="tcMark" style="max-width:520px;margin-bottom:8px">
+    <div class="seg" id="tcMark" style="max-width:560px;margin-bottom:8px">
       <button type="button" data-mark="NIGHT" class="on">Night</button>
       <button type="button" data-mark="RANGE">Range</button>
       <button type="button" data-mark="HOL">Holiday</button>
       <button type="button" data-mark="NOFLY">No fly</button>
       <button type="button" data-mark="">Clear</button>
     </div>
+    <p class="hint" style="margin:-4px 0 8px">Saturdays and Sundays are Feria automatically. Choose Holiday, then tap a weekday to mark another non-working day. Those days are not listed as missing DFS.</p>
     <div id="tcBody"></div>
   </section>
 
@@ -2011,7 +2012,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.05';
+const APP_VERSION = '2.06';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return !!(SUPABASE_URL && SUPABASE_KEY); }
@@ -6481,7 +6482,7 @@ function missingWeekdays(isoList){
       const wd=new Date(t).getUTCDay();
       if(wd===0||wd===6) continue;
       const iso=y+'-'+String(m).padStart(2,'0')+'-'+String(day).padStart(2,'0');
-      if(isOffDay(iso)) continue;
+      if(isFeria(iso) || dayMark(iso)==='NOFLY') continue;
       if(!set.has(iso)) missing.push(iso);
     }
   });
@@ -6784,7 +6785,14 @@ function silefDue(row, key){
   return addDaysIso(PREFS.silefAsOf||isoToday(), Number(days));
 }
 function dayMark(iso){ return (PREFS.dayMarks&&PREFS.dayMarks[iso])||''; }
-function isOffDay(iso){ const m=dayMark(iso); return m==='HOL'||m==='NOFLY'; }
+function isWeekend(iso){
+  if(!iso) return false;
+  const [y,m,d]=iso.split('-').map(Number);
+  const wd=new Date(y,m-1,d).getDay();
+  return wd===0||wd===6;
+}
+function isFeria(iso){ return isWeekend(iso) || dayMark(iso)==='HOL'; }
+function isOffDay(iso){ return isFeria(iso) || dayMark(iso)==='NOFLY'; }
 function isNightDate(iso){
   if(!iso) return false;
   if(dayMark(iso)==='NIGHT') return true;
@@ -7202,7 +7210,7 @@ function renderTeamCal(){
   const title=$('#tcTitle');
   const today=isoToday();
   const markLab={NIGHT:'☾', RANGE:'R', HOL:'H', NOFLY:'X'};
-  let h='<div class="tc-legend"><span><i style="background:#B3CEFB"></i>1ST</span><span><i style="background:#FFC000"></i>2ND</span><span><i style="background:#5b4b8a"></i>NT</span><span><i style="background:#f4c7c3"></i>Absence</span><span><i style="background:#e10600;border-radius:50%"></i>Waiting</span><span><i style="background:#34c759;border-radius:50%"></i>Approved</span></div>';
+  let h='<div class="tc-legend"><span><i style="background:#B3CEFB"></i>1ST</span><span><i style="background:#FFC000"></i>2ND</span><span><i style="background:#5b4b8a"></i>NT</span><span><i style="background:#f4c7c3"></i>Absence</span><span><i style="background:#d5d5dc"></i>Feria</span><span><i style="background:#e10600;border-radius:50%"></i>Waiting</span><span><i style="background:#34c759;border-radius:50%"></i>Approved</span></div>';
   if(isCalOnly() && TC_IP) h='<p class="hint">'+esc(TC_IP)+' · '+yy+' · your year. Red dot is waiting, green dot is approved.</p>'+h;
   if(!names.length){
     if(title) title.textContent='';
@@ -7236,9 +7244,10 @@ function renderTeamCal(){
   for(let day=1;day<=dim;day++){
     const dt=new Date(yy,mm-1,day);
     const iso=TC_YM+'-'+String(day).padStart(2,'0');
-    const wk=dt.getDay()===0||dt.getDay()===6?' wknd':'';
+    const wk=isFeria(iso)?' wknd feria':'';
     const mk=dayMark(iso);
-    h+=`<th class="${wk}${iso===today?' today':''}" data-day="${iso}" title="${canEditCal()?'Tap to mark this day':''}">${day}<div class="dh">${mk?esc(markLab[mk]||''):''}</div></th>`;
+    const headLab=isWeekend(iso)?'Feria':(mk==='HOL'?'Holiday':(mk?esc(markLab[mk]||''):''));
+    h+=`<th class="${wk}${iso===today?' today':''}" data-day="${iso}" title="${canEditCal()?'Tap to mark this day':''}">${day}<div class="dh">${headLab}</div></th>`;
   }
   h+='</tr></thead><tbody>';
   const gridNames=(!isCalOnly() && TC_CAT!=='all')
@@ -7250,7 +7259,7 @@ function renderTeamCal(){
     for(let day=1;day<=dim;day++){
       const iso=TC_YM+'-'+String(day).padStart(2,'0');
       const dt=new Date(yy,mm-1,day);
-      const wk=dt.getDay()===0||dt.getDay()===6?' wknd':'';
+      const wk=isFeria(iso)?' wknd feria':'';
       const base=baseShiftOf(name, iso);
       const eff=effectiveShift(name, iso, base);
       const pend=latestReq(name, iso, 'pending');
@@ -7274,10 +7283,9 @@ function renderTeamCal(){
     let a=0,b=0,c=0;
     gridNames.forEach(n=>{ const s=shownOf(n, iso); if(s==='1ST') a++; else if(s==='2ND') b++; else if(s==='NT') c++; });
     const fp=pctOf(flyList, iso), sp=pctOf(simList, iso);
-    const bits=[
-      fp==null?'FLY —':`<span class="${fp<80?'pct-low':''}">FLY ${fp}%</span>`,
-      sp==null?'SIM —':`<span class="${sp<80?'pct-low':''}">SIM ${sp}%</span>`
-    ];
+    const bits=isFeria(iso)?['Feria']:
+      [fp==null?'FLY —':`<span class="${fp<80?'pct-low':''}">FLY ${fp}%</span>`,
+       sp==null?'SIM —':`<span class="${sp<80?'pct-low':''}">SIM ${sp}%</span>`];
     h+=`<td>${a}/${b}/${c}<div class="dh">${bits.join('<br>')}</div></td>`;
   }
   h+='</tr></tbody></table></div>';
