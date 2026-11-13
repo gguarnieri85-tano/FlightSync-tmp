@@ -2001,7 +2001,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.03';
+const APP_VERSION = '2.04';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return !!(SUPABASE_URL && SUPABASE_KEY); }
@@ -5151,8 +5151,8 @@ function daysLeft(iso){
   const t=new Date(iso+'T12:00:00');
   return Math.round((t-new Date(new Date().toISOString().slice(0,10)+'T12:00:00'))/86400000);
 }
-const IFTS_CODES=new Set(['1ST','2ND','NT','A','X','IML','MED','NLT','NET','CPL','TAF','NAF','LIC','MIX','OFF']);
-const IFTS_CHOICES=['1ST','2ND','NET','NLT','A','MED','NIT','MIX','IML','CPL'];
+const IFTS_CODES=new Set(['1ST','2ND','NT','A','X','IML','MED','NLT','NET','CPL','TAF','NAF','LIC','MIX','OFF','PL']);
+const IFTS_CHOICES=['1ST','2ND','NET','NLT','A','MED','NIT','MIX','IML','CPL','PL'];
 function iftsCodeClass(c, marked){
   if(marked) return 'c-mark';
   const u=String(c||'').toUpperCase();
@@ -5954,7 +5954,7 @@ function toggleMonthLock(ym){
   touchCalendardb();
 }
 function isSchedRole(){ const r=authRole(); return r==='sched'||r==='user'||r==='ok'; }
-const CAL_ABS=['A','MED','ART28','104','MIX','CPL','IML'];
+const CAL_ABS=['A','MED','ART28','104','MIX','CPL','IML','PL'];
 function calChoices(ym){
   return monthLocked(ym)?['1ST','2ND','NT']:['1ST','2ND','NT'].concat(CAL_ABS);
 }
@@ -6527,7 +6527,7 @@ function renderDashboard(){
     const alert=isAdmin() && pending.length
       ? `<div class="dash-alert">${pending.length} calendar request${pending.length>1?'s':''} waiting for approval <button class="btn mini" id="dashOpenCal" type="button">Open calendar</button></div>`
       : `<div class="dash-ok">${isAdmin()?'No calendar requests waiting.':'Taken from the approved shifts of the selected instructors.'}</div>`;
-    calCard.innerHTML=`<div class="dash-h"><span class="wico">🗓</span> Team Calendar</div>${alert}<p class="hint" style="margin:4px 0 0">Presence is everyone except A, MED, Art28, 104, MIX, IML and CPL.</p>`;
+    calCard.innerHTML=`<div class="dash-h"><span class="wico">🗓</span> Team Calendar</div>${alert}<p class="hint" style="margin:4px 0 0">Presence is everyone except A, MED, Art28, 104, MIX, IML, CPL and PL.</p>`;
   }
   renderSettings();
   const resetBtn=$('#dashResetDb'); if(resetBtn) resetBtn.style.display=isAdmin()?'':'none';
@@ -7081,7 +7081,7 @@ function renderOpsCal(){
 }
 
 let TC_YM='', TC_MARK='NIGHT', TC_VIEW='team', TC_IP='', TC_EDIT_IP='', TC_DIRTY=false, TC_CAT='all';
-const TC_SHIFT=['','1ST','2ND','NT','NET','NLT','NIT','A','MED','ART28','104','LIC','OFF','MIX','IML','CPL'];
+const TC_SHIFT=['','1ST','2ND','NT','NET','NLT','NIT','A','MED','ART28','104','PL','LIC','OFF','MIX','IML','CPL'];
 function teamCalNames(){
   const base=(isCalOnly() && Array.isArray(PREFS.calRoster) && PREFS.calRoster.length)?PREFS.calRoster:selectedIPs();
   return base.slice().sort((a,b)=>{
@@ -7103,7 +7103,7 @@ function toneOf(code){
   if(u==='1ST') return 'c-1st';
   if(u==='2ND') return 'c-2nd';
   if(u==='NT'||u==='NIT'||u==='NET'||u==='NIGHT') return 'c-nit';
-  if(['A','MED','LIC','MIX','OFF','NLT','IML','CPL','ART28','104'].includes(u)) return 'c-abs';
+  if(['A','MED','LIC','MIX','OFF','NLT','IML','CPL','ART28','104','PL'].includes(u)) return 'c-abs';
   if(!u) return '';
   if(!IFTS_CODES.has(u) && !IFTS_CHOICES.includes(u)) return 'c-bad';
   return 'c-ok';
@@ -7316,7 +7316,7 @@ function annualBlock(year){
         if(eff==='1ST') c['1ST']++;
         else if(eff==='2ND') c['2ND']++;
         else if(eff==='NT'||eff==='NIT'||eff==='NET') c.NIT++;
-        else if(['A','MED','LIC','MIX','OFF','NLT'].includes(eff)) c.ABS++;
+        else if(['A','MED','LIC','MIX','OFF','NLT','PL'].includes(eff)) c.ABS++;
       }
     }
     return c;
@@ -7338,14 +7338,15 @@ function shiftBucket(code){
 function codeLabel(code){
   const u=shiftBucket(code);
   if(u==='ART28') return 'Art28';
+  if(u==='PL') return 'PL';
   return u;
 }
 function individualYearHtml(year, name){
   const wdN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const mkName=m=>m==='NIGHT'?'Night':m==='HOL'?'Holiday':m==='NOFLY'?'No fly':m==='RANGE'?'Range':'';
-  const keys=['A','MED','ART28','104','MIX','CPL','IML','1ST','2ND','NT'];
+  const keys=['A','MED','ART28','104','MIX','CPL','IML','PL','1ST','2ND','NT'];
   const tot={}; keys.forEach(k=>tot[k]=0);
-  const abs=new Set(['A','MED','ART28','104','MIX','CPL','IML']);
+  const abs=new Set(['A','MED','ART28','104','MIX','CPL','IML','PL']);
   let approved=0, waiting=0, presence=0;
   const months=[];
   for(let m=1;m<=12;m++){
@@ -7384,11 +7385,11 @@ function individualYearHtml(year, name){
     for(let i=first+dim;i<42;i++) cells+='<div class="ios-cell pad"></div>';
     months.push('<section class="ios-month'+(locked?' is-locked':'')+'"><div class="ios-mh">'+esc(lab)+(locked?' <span class="locktag">Locked</span>':'')+' <button type="button" class="lockbtn" data-lock="'+ym+'">'+lockGlyph(ym)+'</button></div><div class="ios-dow"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div><div class="ios-grid">'+cells+'</div></section>');
   }
-  const chip={A:'c-abs',MED:'c-abs',ART28:'c-abs','104':'c-abs',MIX:'c-abs',CPL:'c-abs',IML:'c-abs','1ST':'c-1st','2ND':'c-2nd',NT:'c-nit'};
+  const chip={A:'c-abs',MED:'c-abs',ART28:'c-abs','104':'c-abs',MIX:'c-abs',CPL:'c-abs',IML:'c-abs',PL:'c-abs','1ST':'c-1st','2ND':'c-2nd',NT:'c-nit'};
   let bar='<div class="cal-tot">';
   keys.forEach(k=>{ bar+='<b class="'+(chip[k]||'')+'">'+esc(codeLabel(k))+' '+tot[k]+'</b>'; });
   bar+='<b>Approved '+approved+'</b><b>Waiting '+waiting+'</b><b>Presence '+presence+'</b></div>';
-  bar+='<p class="hint cal-note">Presence counts weekdays only, minus holidays and minus A, MED, Art28, 104, MIX, CPL and IML. Red dot is waiting. Green dot is approved.</p>';
+  bar+='<p class="hint cal-note">Presence counts weekdays only, minus holidays and minus A, MED, Art28, 104, MIX, CPL, IML and PL. Red dot is waiting. Green dot is approved.</p>';
   return bar+'<div class="tc-wrap ios-year">'+months.join('')+'</div>';
 }
 function openTcMenu(el){
@@ -7416,7 +7417,7 @@ function openTcMenu(el){
   const choices=isCalOnly()?calChoices((el.dataset.iso||'').slice(0,7)):TC_SHIFT;
   let html='';
   if(isAdmin() && latestReq(el.dataset.ip, el.dataset.iso, 'pending')) html+='<button type="button" data-code="__approve">Approve</button><button type="button" data-code="__reject">Reject</button>';
-  html+=choices.map(c=>`<button type="button" data-code="${c}">${c==='ART28'?'Art28':(c||'—')}</button>`).join('');
+  html+=choices.map(c=>`<button type="button" data-code="${c}" title="${c==='PL'?'Parental leave':''}">${c==='ART28'?'Art28':c==='PL'?'PL · Parental leave':(c||'—')}</button>`).join('');
   if(isCalOnly() && (el.dataset.iso||'')>isoToday() && latestReq(el.dataset.ip, el.dataset.iso, 'pending')) html+='<button type="button" data-code="__cancel">Cancel request</button>';
   m.innerHTML=html;
   m.dataset.ip=el.dataset.ip; m.dataset.iso=el.dataset.iso;
