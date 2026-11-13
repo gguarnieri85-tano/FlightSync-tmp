@@ -1679,11 +1679,11 @@ html.dark .ifts .wknd,html.dark .c-off{background:#1c1c1e}
     const days = {};
     for (const ev of events) (days[ev.Date] = days[ev.Date] || []).push(ev);
     let ch = '';
-    const pageW = (doc.page && doc.page.width) || 800;
-    const pageH = (doc.page && doc.page.height) || 800;
-    const topCut = Math.max(140, pageH * 0.2);
+    const chPageW = (doc.page && doc.page.width) || 800;
+    const chPageH = (doc.page && doc.page.height) || 800;
+    const topCut = Math.max(140, chPageH * 0.2);
     const heads = words.filter(w => w.top < topCut);
-    const right = heads.filter(w => ((w.x0 + w.x1) / 2) > pageW * 0.5);
+    const right = heads.filter(w => ((w.x0 + w.x1) / 2) > chPageW * 0.5);
     const pool = right.length ? right : heads;
     const one = pool.find(w => /^CH\s*[:\-]?\s*\d{1,2}$/i.test(String(w.text || '').trim()));
     if (one) ch = (String(one.text).match(/(\d{1,2})/) || [])[1] || '';
