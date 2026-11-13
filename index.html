@@ -629,7 +629,7 @@ html.dark .tc .wknd{background:#1c1c1e}
 .tc-req{display:block;font-size:9px;color:#8a6500}
 .tc-legend{display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--muted-t);margin:6px 0}
 .tc-legend i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:4px;vertical-align:-2px}
-.pct-low{background:#ffd0cc;color:#9b1c1c;font-weight:800}
+.ch-badge{display:inline-block;background:#ffe39a;color:#7a5200;font-weight:800;border-radius:6px;padding:1px 8px;letter-spacing:.3px}
 .rej{color:#e10600;font-weight:800;font-size:11px;line-height:1}
 .c-nt{background:#af52de22;color:#7d2dae;font-weight:700}
 .c-a{background:#8e8e9328;color:#636366}
@@ -1679,17 +1679,27 @@ html.dark .ifts .wknd,html.dark .c-off{background:#1c1c1e}
     const days = {};
     for (const ev of events) (days[ev.Date] = days[ev.Date] || []).push(ev);
     let ch = '';
-    const heads = words.filter(w => w.top < 90);
-    const chW = heads.find(w => /^CH$/i.test(String(w.text || '').trim()));
-    if (chW) {
-      const nums = heads.filter(w => /^\d{1,2}$/.test(String(w.text || '').trim())
-        && w.top >= chW.top - 8 && w.top < chW.top + 40
-        && Math.abs(((w.x0 + w.x1) / 2) - ((chW.x0 + chW.x1) / 2)) < 46);
-      nums.sort((a, b) => (a.top - chW.top) - (b.top - chW.top) || a.x0 - b.x0);
-      if (nums[0]) ch = String(nums[0].text).trim();
+    const pageW = (doc.page && doc.page.width) || 800;
+    const pageH = (doc.page && doc.page.height) || 800;
+    const topCut = Math.max(140, pageH * 0.2);
+    const heads = words.filter(w => w.top < topCut);
+    const right = heads.filter(w => ((w.x0 + w.x1) / 2) > pageW * 0.5);
+    const pool = right.length ? right : heads;
+    const one = pool.find(w => /^CH\s*[:\-]?\s*\d{1,2}$/i.test(String(w.text || '').trim()));
+    if (one) ch = (String(one.text).match(/(\d{1,2})/) || [])[1] || '';
+    if (!ch) {
+      const chW = pool.find(w => /^CH$/i.test(String(w.text || '').trim()))
+        || heads.find(w => /^CH$/i.test(String(w.text || '').trim()));
+      if (chW) {
+        const nums = words.filter(w => /^\d{1,2}$/.test(String(w.text || '').trim())
+          && Math.abs(w.top - chW.top) < 16
+          && w.x0 >= chW.x0 - 10 && w.x0 < chW.x1 + 110);
+        nums.sort((a, b) => a.x0 - b.x0 || a.top - b.top);
+        if (nums[0]) ch = String(nums[0].text).trim();
+      }
     }
     if (!ch) {
-      const blob = heads.slice().sort((a, b) => a.top - b.top || a.x0 - b.x0).map(w => w.text).join(' ');
+      const blob = pool.slice().sort((a, b) => a.top - b.top || a.x0 - b.x0).map(w => w.text).join(' ');
       const mm = blob.match(/\bCH\s*[:\-]?\s*(\d{1,2})\b/i);
       if (mm) ch = mm[1];
     }
@@ -2001,7 +2011,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.04';
+const APP_VERSION = '2.05';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return !!(SUPABASE_URL && SUPABASE_KEY); }
@@ -2407,6 +2417,10 @@ function assignGradebookSlots(rec){
 }
 
 /* ---------- import ---------- */
+function chNum(v){
+  const n=parseInt(String(v||'').replace(/\D/g,''),10);
+  return isNaN(n)?-1:n;
+}
 async function processOnePdf(file){
   if(!window.pdfjsLib) throw new Error('PDF engine not loaded.');
   const buf = await file.arrayBuffer();
@@ -2425,8 +2439,11 @@ async function processOnePdf(file){
     events:r.events, timings:r.timings, roster:r.roster,
     absentIPs:vis.absent, ipList:(r.rosterInfo||[]).map(ri=>({name:ri.name,top:ri.top})),
     listMeta:r.listMeta||{}, ch:r.ch||'', importedAt:new Date().toISOString(), source:file.name };
-  // carry over any manual cancellations from a previous import of the same day
-  const prev = STATE.days.find(d=>d.id===rec.id); let carried=0;
+  const prev = STATE.days.find(d=>d.id===rec.id);
+  if(prev && chNum(prev.ch)>chNum(rec.ch)){
+    return { rec:prev, red:0, absent:0, carried:0, events:(prev.events||[]).length, kept:true };
+  }
+  let carried=0;
   if(prev){
     for(const ne of rec.events){
       const m = prev.events.find(oe=>(oe.ManualStatus||oe.ManualTimes) && oe.IP===ne.IP && oe.Type===ne.Type
@@ -2446,7 +2463,9 @@ async function processOnePdf(file){
   }
   await assignGradebookSlots(rec);
   await DB.put(rec);
-  return { rec, red:vis.red, absent:vis.absent.length, carried, events:r.events.length };
+  const idx=STATE.days.findIndex(d=>d.id===rec.id);
+  if(idx>=0) STATE.days[idx]=rec; else STATE.days.push(rec);
+  return { rec, red:vis.red, absent:vis.absent.length, carried, events:r.events.length, kept:false };
 }
 
 async function importPdf(file){
@@ -2457,6 +2476,8 @@ async function importPdf(file){
     await refresh();
     const [d,mo] = res.rec.tab.split('_');
     toast('Imported '+d+' '+MONTH_NAMES[+mo].slice(0,3)+' '+res.rec.year+' — '+res.events+' events'+
+          (res.rec.ch!==''&&res.rec.ch!=null?' · CH '+res.rec.ch:'')+
+          (res.kept?' · kept higher CH':'')+
           (res.red?' · '+res.red+' red-cancelled':'')+(res.absent?' · '+res.absent+' absent':'')+
           (res.carried?' · kept '+res.carried+' manual':''));
     markDbDirty();
@@ -2606,7 +2627,7 @@ function renderDay(){
     return ta-tb || String(a.e.IP).localeCompare(String(b.e.IP));
   });
   const exp = !!PREFS.eventsExpanded;
-  let html = `<p class="hint" style="margin-top:0">Viewing <b>${rec.ch!==''&&rec.ch!=null?('CH '+esc(rec.ch)):'CH —'}</b>${rec.source?' · '+esc(rec.source):''}${rec.ch!=null&&rec.ch!==''?'':' · re-import this PDF to read the CH box'}</p>`+legendHTML();
+  let html = `<p class="hint" style="margin-top:0">Viewing <b class="ch-badge">${rec.ch!==''&&rec.ch!=null?('CH '+esc(rec.ch)):'CH —'}</b>${rec.source?' · '+esc(rec.source):''}${rec.ch!=null&&rec.ch!==''?'':' · re-import this PDF to read the CH box'}</p>`+legendHTML();
   html += `<div class="card day-opts">
     <label><input type="checkbox" id="chkMargin" ${PREFS.alertMargins!==false?'checked':''}> Shift buffers
       <input type="number" id="marginStart" min="0" max="60" value="${PREFS.marginStart??15}"> min after show
