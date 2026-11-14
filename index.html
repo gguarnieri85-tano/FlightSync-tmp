@@ -2017,7 +2017,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.14';
+const APP_VERSION = '2.15';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return !!(SUPABASE_URL && SUPABASE_KEY); }
@@ -5520,6 +5520,29 @@ function afterCalChange(){
   if(on('#view-planning')) renderIfts();
 }
 function centerHide(){ const box=$('#centerBox'); if(box) box.classList.remove('show'); const btns=$('#centerBtns'); if(btns){ btns.style.flexDirection=''; btns.style.alignItems=''; } }
+function askZuluTime(code){
+  return new Promise(resolve=>{
+    const box=$('#centerBox'); if(!box){ resolve(''); return; }
+    $('#centerIcon').innerHTML='';
+    $('#centerTitle').textContent=code+' · Zulu time';
+    $('#centerText').textContent='Choose the Zulu time for this '+code+'.';
+    const btns=$('#centerBtns'); btns.innerHTML='';
+    const inp=document.createElement('input');
+    inp.type='time'; inp.id='tcTime'; inp.value='18:00';
+    inp.style.cssText='width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:#fff;color:#111;font:inherit;font-size:18px;margin:0 0 12px';
+    btns.appendChild(inp);
+    const ok=document.createElement('button');
+    ok.className='btn'; ok.type='button'; ok.textContent='Use this time';
+    ok.onclick=()=>{ const v=inp.value||''; centerHide(); resolve(/^\d{2}:\d{2}$/.test(v)?v:''); };
+    btns.appendChild(ok);
+    const c=document.createElement('button');
+    c.className='btn subtle'; c.type='button'; c.textContent='Cancel';
+    c.onclick=()=>{ centerHide(); resolve(''); };
+    btns.appendChild(c);
+    box.classList.add('show');
+    setTimeout(()=>inp.focus(), 40);
+  });
+}
 function centerAsk(title, text, okLabel, cancelLabel){
   return new Promise(resolve=>{
     const box=$('#centerBox'); if(!box){ resolve(false); return; }
@@ -7525,9 +7548,9 @@ function openTcMenu(el){
         return;
       }
       if(b.dataset.code==='NLT' || b.dataset.code==='NET'){
-        m.dataset.timed=b.dataset.code;
-        m.innerHTML='<div style="padding:6px 8px;font-size:12px;font-weight:700">'+b.dataset.code+' · Zulu time</div><input id="tcTime" type="time" style="margin:0 8px 8px;width:calc(100% - 16px)"><button type="button" data-code="__time">Request '+b.dataset.code+'</button>';
-        const inp=$('#tcTime'); if(inp) inp.focus();
+        const code=b.dataset.code, ip=m.dataset.ip, iso=m.dataset.iso;
+        m.style.display='none';
+        askZuluTime(code).then(t=>{ if(t) proposeShift(ip, iso, code, false, t); else toast('Choose a Zulu time'); });
         return;
       }
       if(b.dataset.code==='__cancel') cancelOwnRequest(m.dataset.ip, m.dataset.iso);
