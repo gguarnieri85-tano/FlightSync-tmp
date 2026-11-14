@@ -2015,7 +2015,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.12';
+const APP_VERSION = '2.13';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return !!(SUPABASE_URL && SUPABASE_KEY); }
@@ -5411,7 +5411,9 @@ function renderIfts(){
       const exp=(expMap[iso]||[]).some(c=>String(c.ip).toUpperCase()===String(ip).toUpperCase() || String(c.ip).toUpperCase().includes(name));
       const wk=di>=5?' wknd':'';
       const meta=distroCell(name, iso);
-      const note=meta.note||'';
+      const appr=latestReq(name, iso, 'approved');
+      let note=meta.note||'';
+      if(appr && String(appr.code||'').toUpperCase()==='NET' && appr.time && !note.includes(appr.time)) note=note?(note+' · '+appr.time+'z'):(appr.time+'z');
       const marked=!!meta.mark;
       const editable=!isCalOnly();
       const rej=rejectedReq(name, iso);
@@ -6014,7 +6016,23 @@ function toggleMonthLock(ym){
 function isSchedRole(){ const r=authRole(); return r==='sched'||r==='user'||r==='ok'; }
 const CAL_ABS=['A','MED','ART28','104','MIX','CPL','IML','PL'];
 function calChoices(ym){
-  return monthLocked(ym)?['1ST','2ND','NT']:['1ST','2ND','NT'].concat(CAL_ABS);
+  return (monthLocked(ym)?['1ST','2ND','NT']:['1ST','2ND','NT'].concat(CAL_ABS)).concat(['NLT','NET']);
+}
+function reqLabel(code, time){
+  const u=String(code||'').toUpperCase();
+  const base=u==='ART28'?'Art28':u==='PL'?'PL':u;
+  return (time && (u==='NET'||u==='NLT')) ? base+' '+time+'z' : base;
+}
+function applyNetNote(name, iso, time){
+  if(!name || !iso || !time) return;
+  const k=normIp(name)+'|'+iso;
+  PREFS.distroCell=PREFS.distroCell||{};
+  const cur=PREFS.distroCell[k]||{note:'', mark:false};
+  const stamp=time+'z';
+  if(String(cur.note||'').includes(stamp)) return;
+  cur.note=cur.note ? (cur.note+' · '+stamp) : stamp;
+  PREFS.distroCell[k]=cur;
+  savePref('distroCell');
 }
 function calActor(){
   if(isCalOnly()) return TC_EDIT_IP||'Team Calendar';
@@ -6065,25 +6083,27 @@ function cancelOwnRequest(name, iso){
   afterCalChange();
   toast('Request cancelled.');
 }
-function proposeShift(name, iso, code, fromDistro){
+function proposeShift(name, iso, code, fromDistro, time){
   const leader=isAdmin();
   if(!leader && (iso||'')<=isoToday()){ toast('Only future dates'); return; }
   if(isCalOnly()){
     if(!TC_EDIT_IP || !sameIp(name, TC_EDIT_IP)){ toast('Choose your instructor first'); return; }
     code=String(code||'').toUpperCase();
     const allowed=calChoices((iso||'').slice(0,7));
-    if(!allowed.includes(code)){ toast(monthLocked((iso||'').slice(0,7))?'This month is locked. Only 1ST, 2ND or NT.':'That code is not allowed'); return; }
+    if(!allowed.includes(code)){ toast(monthLocked((iso||'').slice(0,7))?'This month is locked. Only 1ST, 2ND, NT, NLT or NET.':'That code is not allowed'); return; }
   }
   const ip=normIp(name);
   const approved=leader || (!!fromDistro && isSchedRole());
+  const zulu=/^\d{2}:\d{2}$/.test(String(time||''))?String(time):'';
   if(leader || (approved && fromDistro)) PREFS.calReq=calRequests().filter(r=>!(r.iso===iso && sameIp(r.ip, ip)));
   else PREFS.calReq=calRequests().filter(r=>!(r.status==='pending' && r.iso===iso && sameIp(r.ip, ip)));
-  PREFS.calReq.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5), ip, iso, code:String(code||'').toUpperCase(), status:approved?'approved':'pending', ts:Date.now()});
+  PREFS.calReq.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5), ip, iso, code:String(code||'').toUpperCase(), time:zulu, status:approved?'approved':'pending', ts:Date.now()});
+  if(approved && String(code||'').toUpperCase()==='NET' && zulu) applyNetNote(name, iso, zulu);
   if(approved && !String(code||'').trim()){
     const k=normIp(name)+'|'+iso;
     if(PREFS.distroCell && PREFS.distroCell[k]){ delete PREFS.distroCell[k]; savePref('distroCell'); }
   }
-  logCal(approved?(fromDistro&&!leader?'set':'approved'):'requested', ip, iso, code, calActor());
+  logCal(approved?(fromDistro&&!leader?'set':'approved'):'requested', ip, iso, reqLabel(code, zulu), calActor());
   afterCalChange();
   if(isCalOnly()){
     TC_DIRTY=true;
@@ -6203,7 +6223,8 @@ async function syncFolderSources(opts){
 function setCalStatus(id, status){
   const r=calRequests().find(x=>x.id===id); if(!r) return;
   r.status=status; r.ts=Date.now();
-  logCal(status==='approved'?'approved':'rejected', r.ip, r.iso, r.code, 'Team Leader');
+  if(status==='approved' && String(r.code||'').toUpperCase()==='NET' && r.time) applyNetNote(r.ip, r.iso, r.time);
+  logCal(status==='approved'?'approved':'rejected', r.ip, r.iso, reqLabel(r.code, r.time), 'Team Leader');
   afterCalChange();
 }
 function setIftsShift(mk,ri,ci,code){
@@ -7271,7 +7292,7 @@ function renderTeamCal(){
       else {
         h+='<div class="silef-tbl"><table><thead><tr><th class="nm">Instructor</th><th>Day</th><th>Requested</th><th></th></tr></thead><tbody>';
         pending.forEach(r=>{
-          h+=`<tr><td class="nm">${esc(r.ip)}</td><td>${esc(r.iso)}</td><td class="${toneOf(r.code)}">${esc(codeLabel(r.code)||'clear')}</td><td><button type="button" class="btn mini" data-ok="${esc(r.id)}">Approve</button> <button type="button" class="btn mini subtle" data-no="${esc(r.id)}">Reject</button></td></tr>`;
+          h+=`<tr><td class="nm">${esc(r.ip)}</td><td>${esc(r.iso)}</td><td class="${toneOf(r.code)}">${esc(reqLabel(r.code, r.time)||'clear')}</td><td><button type="button" class="btn mini" data-ok="${esc(r.id)}">Approve</button> <button type="button" class="btn mini subtle" data-no="${esc(r.id)}">Reject</button></td></tr>`;
         });
         h+='</tbody></table></div>';
       }
@@ -7307,12 +7328,15 @@ function renderTeamCal(){
       const base=baseShiftOf(name, iso);
       const eff=effectiveShift(name, iso, base);
       const pend=latestReq(name, iso, 'pending');
+      const appr=latestReq(name, iso, 'approved');
       const show=pend?pend.code:eff;
+      const showTime=(pend&&pend.time)?pend.time:(appr&&appr.time?appr.time:'');
+      const showLab=reqLabel(show, showTime);
       const cls=toneOf(show)+(pend?' pend':'');
-      const tip=pend?('Requested '+(pend.code||'clear')+' · approved '+(eff||'—')):(eff||'');
+      const tip=pend?('Requested '+showLab+' · approved '+(eff||'—')):(showLab||'');
       const rej=rejectedReq(name, iso);
       const night=dayMark(iso)==='NIGHT'?'☾ ':'';
-      h+=`<td class="tc-cell ${wk} ${cls}" data-ip="${esc(name)}" data-iso="${iso}" title="${esc(tip+(rej?' · request rejected':''))}">${night}${esc(show||'')}${rej?'<span class="rej" title="Rejected. The day is clear. A new request can be made.">⚠</span>':''}${pend&&eff&&pend.code!==eff?`<span class="tc-req">${esc(eff)}</span>`:''}</td>`;
+      h+=`<td class="tc-cell ${wk} ${cls}" data-ip="${esc(name)}" data-iso="${iso}" title="${esc(tip+(rej?' · request rejected':''))}">${night}${esc(showLab||'')}${rej?'<span class="rej" title="Rejected. The day is clear. A new request can be made.">⚠</span>':''}${pend&&eff&&pend.code!==eff?`<span class="tc-req">${esc(eff)}</span>`:''}</td>`;
     }
     h+='</tr>';
   });
@@ -7340,7 +7364,7 @@ function renderTeamCal(){
     else {
       h+='<div class="silef-tbl"><table><thead><tr><th class="nm">Instructor</th><th>Day</th><th>Requested</th><th></th></tr></thead><tbody>';
       pendingMonth.forEach(r=>{
-        h+=`<tr><td class="nm">${esc(r.ip)}</td><td>${esc(r.iso)}</td><td class="${toneOf(r.code)}">${esc(codeLabel(r.code)||'clear')}</td><td><button type="button" class="btn mini" data-ok="${esc(r.id)}">Approve</button> <button type="button" class="btn mini subtle" data-no="${esc(r.id)}">Reject</button></td></tr>`;
+        h+=`<tr><td class="nm">${esc(r.ip)}</td><td>${esc(r.iso)}</td><td class="${toneOf(r.code)}">${esc(reqLabel(r.code, r.time)||'clear')}</td><td><button type="button" class="btn mini" data-ok="${esc(r.id)}">Approve</button> <button type="button" class="btn mini subtle" data-no="${esc(r.id)}">Reject</button></td></tr>`;
       });
       h+='</tbody></table></div>';
     }
@@ -7451,6 +7475,8 @@ function individualYearHtml(year, name){
       const appr=latestReq(name, iso, 'approved');
       const hasAppr=!!(appr && appr.code);
       const show=pend?pend.code:eff;
+      const showTime=(pend&&pend.time)?pend.time:(appr&&appr.time?appr.time:'');
+      const showLab=reqLabel(show, showTime);
       const bucket=shiftBucket(show);
       if(tot[bucket]!=null) tot[bucket]++;
       if(pend) waiting++;
@@ -7464,7 +7490,7 @@ function individualYearHtml(year, name){
       const rej=rejectedReq(name, iso);
       const moon=mk==='NIGHT'?'☾':'';
       const gcal=show?('<a class="tc-gcal" href="'+gcalDayUrl(name, iso, codeLabel(show)||show, !!pend)+'" target="_blank" rel="noopener" title="Add this day to Google Calendar">G</a>'):'';
-      cells+='<div class="ios-cell tc-cell '+wk+today+' '+toneOf(show)+flag+'" data-ip="'+esc(name)+'" data-iso="'+iso+'" title="'+esc(iso+' '+wdN[dow]+' '+(show||'')+(lab2?' '+lab2:'')+(rej?' rejected':''))+'"><span class="n">'+moon+d+'</span><span class="tc-wd">'+wdN[dow]+'</span>'+(show?'<span class="cd">'+esc(codeLabel(show))+'</span>':'')+(rej?'<span class="rej" title="Rejected. The day is clear. You can request again.">⚠</span>':'')+(lab2 && mk!=='NIGHT'?'<span class="tc-mk '+mk+'">'+esc(lab2)+'</span>':'')+dot+gcal+'</div>';
+      cells+='<div class="ios-cell tc-cell '+wk+today+' '+toneOf(show)+flag+'" data-ip="'+esc(name)+'" data-iso="'+iso+'" title="'+esc(iso+' '+wdN[dow]+' '+(showLab||'')+(lab2?' '+lab2:'')+(rej?' rejected':''))+'"><span class="n">'+moon+d+'</span><span class="tc-wd">'+wdN[dow]+'</span>'+(show?'<span class="cd">'+esc(showLab)+'</span>':'')+(rej?'<span class="rej" title="Rejected. The day is clear. You can request again.">⚠</span>':'')+(lab2 && mk!=='NIGHT'?'<span class="tc-mk '+mk+'">'+esc(lab2)+'</span>':'')+dot+gcal+'</div>';
     }
     for(let i=first+dim;i<42;i++) cells+='<div class="ios-cell pad"></div>';
     months.push('<section class="ios-month'+(locked?' is-locked':'')+'"><div class="ios-mh">'+esc(lab)+(locked?' <span class="locktag">Locked</span>':'')+' <button type="button" class="lockbtn" data-lock="'+ym+'">'+lockGlyph(ym)+'</button></div><div class="ios-dow"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div><div class="ios-grid">'+cells+'</div></section>');
@@ -7489,6 +7515,19 @@ function openTcMenu(el){
     document.body.appendChild(m);
     m.onclick=e=>{
       const b=e.target.closest('button'); if(!b) return;
+      if(b.dataset.code==='__time'){
+        const t=($('#tcTime')&&$('#tcTime').value)||'';
+        if(!/^\d{2}:\d{2}$/.test(t)){ toast('Choose a Zulu time'); return; }
+        proposeShift(m.dataset.ip, m.dataset.iso, m.dataset.timed||'', false, t);
+        m.style.display='none';
+        return;
+      }
+      if(b.dataset.code==='NLT' || b.dataset.code==='NET'){
+        m.dataset.timed=b.dataset.code;
+        m.innerHTML='<div style="padding:6px 8px;font-size:12px;font-weight:700">'+b.dataset.code+' · Zulu time</div><input id="tcTime" type="time" style="margin:0 8px 8px;width:calc(100% - 16px)"><button type="button" data-code="__time">Request '+b.dataset.code+'</button>';
+        const inp=$('#tcTime'); if(inp) inp.focus();
+        return;
+      }
       if(b.dataset.code==='__cancel') cancelOwnRequest(m.dataset.ip, m.dataset.iso);
       else if(b.dataset.code==='__approve' || b.dataset.code==='__reject'){
         const pend=latestReq(m.dataset.ip, m.dataset.iso, 'pending');
