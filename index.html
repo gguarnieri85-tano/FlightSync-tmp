@@ -568,7 +568,8 @@ html.dark .ifts th{background:#2c2c2e} html.dark .ifts th.nm{background:#2c2c2e}
 .c-ok{background:#fff;color:#002060;font-weight:700;box-shadow:inset 0 0 0 1px #8aa0b8}
 .c-bad{background:#C22114;color:#fff;font-weight:800}
 .c-nit{background:#5b4b8a;color:#fff;font-weight:700}
-.c-abs{background:#f4c7c3;color:#7a1212;font-weight:700}
+.c-naf{background:#34c759;color:#0b3d16;font-weight:700}
+.ios-cell.c-naf{background:#34c759;color:#0b3d16}
 .tc-cell.pend,.ifts-code.pend{position:relative}
 .tc-cell.pend::after,.ifts-code.pend::after{content:"";position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:50%;background:#e10600;box-shadow:0 0 0 1px #fff}
 .center-box{display:none;position:fixed;inset:0;z-index:260;background:#0008;align-items:center;justify-content:center;padding:24px}
@@ -673,6 +674,8 @@ html.dark .ifts .wknd,html.dark .c-off{background:#1c1c1e}
   <div class="nav-group nav-app">Team Calendar data</div>
   <button class="tab nav-app" data-view="planning"><span class="ti">🗓</span>Week Distro</button>
   <button class="tab nav-app" data-view="silef"><span class="ti">◎</span>Currencies</button>
+  <div class="nav-group nav-leonardo">Leonardo</div>
+  <button class="tab nav-leonardo" data-view="lndcal"><span class="ti">✈</span>LND Calendar</button>
   <button class="tab nav-leader" data-view="settings"><span class="ti">⚙</span>Configuration</button>
   <button class="tab" id="signOutBtn" type="button"><span class="ti">↩</span>Sign out</button>
 </nav>
@@ -944,6 +947,18 @@ html.dark .ifts .wknd,html.dark .c-off{background:#1c1c1e}
     <div id="tcBody"></div>
   </section>
 
+  <section class="view" id="view-lndcal">
+    <p class="hint">Leonardo team calendar. Absences (IML, CPL, A, MIX, NAF, Art28, 104) are shown as N/A.</p>
+    <div class="controls">
+      <button class="btn mini" id="lndPrev" type="button">‹</button>
+      <button class="btn mini" id="lndToday" type="button">This month</button>
+      <button class="btn mini" id="lndNext" type="button">›</button>
+      <b id="lndTitle"></b>
+      <button class="btn" id="lndPrint" type="button">Print PDF</button>
+    </div>
+    <div id="lndBody"></div>
+  </section>
+
   <section class="view" id="view-planning">
     <p class="hint">Week Distro is taken from the Team Calendar. Empty days stay empty. Tap a code to change it. Type a note next to each presence. Print covers Monday to Friday of this week.</p>
     <div class="controls">
@@ -1079,6 +1094,10 @@ html.dark .ifts .wknd,html.dark .c-off{background:#1c1c1e}
       </div>
     </div>
     <p class="hint">Changes are saved automatically to the shared database.</p>
+
+    <h2 class="sec">Calendar codes</h2>
+    <p class="hint">Team Leader only. Turn a code on so Team Calendar users can request it. The colour is used in the Calendar and Week Distro. Distro label is what is printed in Week Distro.</p>
+    <div class="card" id="codeCfgBox"></div>
 
     <h2 class="sec">Import</h2>
     <div class="card">
@@ -2017,7 +2036,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.16';
+const APP_VERSION = '2.17';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return !!(SUPABASE_URL && SUPABASE_KEY); }
@@ -2118,7 +2137,7 @@ const PREFS = { focus:new Set(), viewMode:'table', zoom:1, ganttZoom:1, redDetec
   alertDuty: true, dutyHoursMT: 9, dutyHoursFri: 6,
   eventsExpanded: false, weekEvLimit: 8, weekEvAlarm: true,
   weekFltLimit: 8, weekSimStuLimit: 6, acceptedAnom: {},
-  currencies: [], silefRows: [], silefFile: '', silefAsOf: '', nightWeeks: [], dayMarks: {}, monthLock: {}, distroCell: {}, calLog: [], homeLat: 45.63, homeLon: 8.72, iftsCal: null, iftsMonths: {}, distroHist: {} };
+  currencies: [], silefRows: [], silefFile: '', silefAsOf: '', nightWeeks: [], dayMarks: {}, monthLock: {}, distroCell: {}, calLog: [], codeCfg: {}, homeLat: 45.63, homeLon: 8.72, iftsCal: null, iftsMonths: {}, distroHist: {} };
 const ZOOM_STEPS = [0.75,0.85,1,1.15,1.3,1.5];
 async function loadPrefs(){
   try{
@@ -2161,6 +2180,7 @@ async function loadPrefs(){
     const ml = await DB.getSetting('monthLock'); if(ml && typeof ml==='object') PREFS.monthLock = ml;
     const dc = await DB.getSetting('distroCell'); if(dc && typeof dc==='object') PREFS.distroCell = dc;
     const clog = await DB.getSetting('calLog'); if(Array.isArray(clog)) PREFS.calLog = clog;
+    const ccfg = await DB.getSetting('codeCfg'); if(ccfg && typeof ccfg==='object') PREFS.codeCfg = ccfg;
     const lkm = await DB.getSetting('lockMin'); if(typeof lkm==='number') PREFS.lockMin = lkm;
     const wb = await DB.getSetting('weeklyBackup'); if(typeof wb==='boolean') PREFS.weeklyBackup = wb;
     const bwd = await DB.getSetting('backupWeekday'); if(typeof bwd==='number' && bwd>=0 && bwd<=6) PREFS.backupWeekday = bwd;
@@ -2210,7 +2230,7 @@ function paintVersion(){
   ['appVerLabel','appVerTop','appVerFoot','lockVer'].forEach(id=>{ const el=$('#'+id); if(el) el.textContent='v'+APP_VERSION; });
 }
 let DB_DIRTY=false, PREF_QUIET=0, ALLOW_DIRTY=false;
-const CAL_PREF_KEYS=new Set(['calReq','dayMarks','monthLock','distroCell','calLog','calRoster','calSim']);
+const CAL_PREF_KEYS=new Set(['calReq','dayMarks','monthLock','distroCell','calLog','calRoster','calSim','codeCfg']);
 const META_PREF_KEYS=new Set(['appliedDbStamp','lastBackupAt','folderDbName','folderLinkedName','theme']);
 function pendingSave(){
   if(!isUnlocked()) return '';
@@ -3755,6 +3775,7 @@ function renderSettings(){
   };
   paintPassFields();
   paintPassBox();
+  renderCodeCfg();
   const ln=$('#lockNowBtn'); if(ln) ln.onclick=()=>lockApp('Locked from Settings');
   const wchk=$('#weeklyBackupChk');
   if(wchk){ wchk.checked=!!PREFS.weeklyBackup; wchk.onchange=()=>{ PREFS.weeklyBackup=wchk.checked; savePref('weeklyBackup'); updateWeeklyBar(); }; }
@@ -5433,11 +5454,12 @@ function renderIfts(){
       const editable=!isCalOnly();
       const rej=rejectedReq(name, iso);
       const chip=iftsCodeClass(eff, marked)+(pend?' pend':'');
-      const tip=pend?('Approved '+ (eff||'—')+' · requested '+(pend.code||'—')):(eff||'')+(rej?' · request rejected':'');
-      h+=`<td class="ifts-cell${wk}${exp?' c-exp':''}" title="${esc(name)} ${iso} ${esc(tip)}">`+
+      const shown=codeDistroLabel(eff);
+      const tip=pend?('Approved '+ (shown||'—')+' · requested '+(pend.code||'—')):(shown||'')+(rej?' · request rejected':'');
+      h+=`<td class="ifts-cell${wk}${exp?' c-exp':''}" title="${esc(name)} ${iso} ${esc(tip)}" style="${eff&&!marked?'background:'+codeColor(eff):''}">`+
         (editable
-          ? `<div class="ifts-line"><span class="ifts-code ${chip}" data-ip="${esc(name)}" data-iso="${iso}">${esc(eff||'—')}</span>${rej?'<span class="rej" title="Rejected">⚠</span>':''}<input type="checkbox" class="ifts-tick" data-ip="${esc(name)}" data-iso="${iso}" ${marked?'checked':''} title="Yellow in Week Distro"><input class="ifts-note" data-ip="${esc(name)}" data-iso="${iso}" value="${esc(note).replace(/"/g,'"')}" placeholder="note" title="Note"></div>`
-          : `${esc(eff||'')}${rej?'<span class="rej" title="Rejected">⚠</span>':''}`)+
+          ? `<div class="ifts-line"><span class="ifts-code ${chip}" data-ip="${esc(name)}" data-iso="${iso}" style="${eff&&!marked?'background:'+codeColor(eff)+';color:#111':''}">${esc(shown||'—')}</span>${rej?'<span class="rej" title="Rejected">⚠</span>':''}<input type="checkbox" class="ifts-tick" data-ip="${esc(name)}" data-iso="${iso}" ${marked?'checked':''} title="Yellow in Week Distro"><input class="ifts-note" data-ip="${esc(name)}" data-iso="${iso}" value="${esc(note).replace(/"/g,'"')}" placeholder="note" title="Note"></div>`
+          : `${esc(shown||'')}${rej?'<span class="rej" title="Rejected">⚠</span>':''}`)+
         `</td>`;
     });
     h+='</tr>';
@@ -5533,6 +5555,79 @@ function afterCalChange(){
   if(on('#view-planning')) renderIfts();
 }
 function centerHide(){ const box=$('#centerBox'); if(box) box.classList.remove('show'); const btns=$('#centerBtns'); if(btns){ btns.style.flexDirection=''; btns.style.alignItems=''; } }
+function renderCodeCfg(){
+  const box=$('#codeCfgBox'); if(!box) return;
+  if(!isAdmin()){ box.innerHTML='<p class="hint">Only the Team Leader can change calendar codes.</p>'; return; }
+  box.innerHTML=CODE_ORDER.map(code=>{
+    const cfg=codeCfg(code);
+    return `<div class="setrow" style="gap:8px;align-items:center">
+      <input type="checkbox" data-code-on="${code}" ${cfg.on?'checked':''} title="Users can request this">
+      <input type="color" data-code-color="${code}" value="${cfg.color}" title="Calendar and Distro colour" style="width:36px;height:28px;padding:0;border:none;background:transparent">
+      <b style="min-width:54px">${esc(code)}</b>
+      <input type="text" data-code-distro="${code}" value="${esc(cfg.distro)}" placeholder="Distro label" style="flex:1;min-width:80px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font:inherit">
+    </div>`;
+  }).join('');
+  box.querySelectorAll('[data-code-on]').forEach(el=>el.onchange=()=>saveCodeCfg(el.dataset.codeOn, {on:el.checked}));
+  box.querySelectorAll('[data-code-color]').forEach(el=>el.onchange=()=>saveCodeCfg(el.dataset.codeColor, {color:el.value}));
+  box.querySelectorAll('[data-code-distro]').forEach(el=>el.onchange=()=>saveCodeCfg(el.dataset.codeDistro, {distro:el.value.trim()}));
+}
+function saveCodeCfg(code, patch){
+  const u=String(code||'').toUpperCase();
+  PREFS.codeCfg=PREFS.codeCfg||{};
+  PREFS.codeCfg[u]=Object.assign({}, codeCfg(u), patch);
+  savePref('codeCfg');
+  scheduleCloudSave();
+}
+const LND_ABS=new Set(['IML','CPL','A','MIX','NAF','ART28','104']);
+let LND_YM='';
+function lndLabel(code){
+  const u=String(code||'').toUpperCase();
+  return LND_ABS.has(u) ? 'N/A' : u;
+}
+function renderLndCal(){
+  const body=$('#lndBody'); if(!body) return;
+  if(!LND_YM) LND_YM=isoToday().slice(0,7);
+  const [yy,mm]=LND_YM.split('-').map(Number);
+  const title=$('#lndTitle');
+  if(title) title.textContent=new Date(yy, mm-1, 1).toLocaleString('en-GB',{month:'long', year:'numeric'});
+  const names=teamCalNames();
+  const dim=new Date(yy, mm, 0).getDate();
+  let h='<div class="tc-wrap"><table class="tc"><thead><tr><th class="nm">Instructor</th>';
+  for(let day=1;day<=dim;day++){
+    const iso=LND_YM+'-'+String(day).padStart(2,'0');
+    const wk=isFeria(iso)?' wknd feria':'';
+    h+=`<th class="${wk}">${day}</th>`;
+  }
+  h+='</tr></thead><tbody>';
+  names.forEach(name=>{
+    const role=roleOf(iftsMatchName(name))==='sim'?'SIM':'FLY';
+    h+=`<tr><td class="nm">${esc(name)} <span class="hint">${role}</span></td>`;
+    for(let day=1;day<=dim;day++){
+      const iso=LND_YM+'-'+String(day).padStart(2,'0');
+      const eff=effectiveShift(name, iso, baseShiftOf(name, iso));
+      const lab=lndLabel(eff);
+      const bg=lab==='N/A'?'#d0d0d6':(eff?codeColor(eff):'');
+      h+=`<td class="${isFeria(iso)?'wknd feria':''}" style="${bg?'background:'+bg+';color:#111':''}">${esc(lab||'')}</td>`;
+    }
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+  body.innerHTML=h||emptyBlock('No instructors.');
+}
+function printLndCal(){
+  if(!LND_YM) LND_YM=isoToday().slice(0,7);
+  const [yy,mm]=LND_YM.split('-').map(Number);
+  const month=new Date(yy, mm-1, 1).toLocaleString('en-GB',{month:'long', year:'numeric'});
+  const body=$('#lndBody');
+  const table=body?body.querySelector('table'):null;
+  const w=window.open('','_blank');
+  if(!w){ toast('Allow pop-ups to print'); return; }
+  const now=new Date();
+  const stamp=now.toLocaleString('it-IT',{timeZone:'Europe/Rome', hour12:false})+' local · '+now.toISOString().slice(0,16).replace('T',' ')+'Z · FlightSync v'+APP_VERSION;
+  w.document.write('<html><head><title>ACS - IFTS Calendar</title><style>@page{size:A4 landscape;margin:6mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,Helvetica,sans-serif;margin:0;color:#111}h1{font-size:16px;margin:0 0 2mm}p{font-size:9px;margin:0 0 3mm;color:#333}table{width:100%;border-collapse:collapse;font-size:8px}th,td{border:1px solid #bbb;padding:1px 2px;text-align:center}th.nm,td.nm{text-align:left;white-space:nowrap}</style></head><body><h1>ACS - IFTS Calendar</h1><p>'+esc(month)+' · '+esc(stamp)+'</p>'+(table?table.outerHTML:'')+'</body></html>');
+  w.document.close();
+  setTimeout(()=>{ w.focus(); w.print(); }, 200);
+}
 function askZuluTime(code){
   return new Promise(resolve=>{
     const box=$('#centerBox'); if(!box){ resolve(''); return; }
@@ -6052,9 +6147,44 @@ function toggleMonthLock(ym){
   touchCalendardb();
 }
 function isSchedRole(){ const r=authRole(); return r==='sched'||r==='user'||r==='ok'; }
-const CAL_ABS=['A','MED','ART28','104','MIX','CPL','IML','PL'];
+const CAL_ABS=['A','MED','ART28','104','MIX','CPL','IML','PL','NAF'];
+const CODE_ORDER=['1ST','2ND','NT','NET','NLT','A','MED','ART28','104','MIX','NAF','CPL','IML','PL','LIC','OFF'];
+const CODE_DEFAULTS={
+  '1ST':{on:true,color:'#B3CEFB',distro:'1ST'},
+  '2ND':{on:true,color:'#FFC000',distro:'2ND'},
+  'NT':{on:true,color:'#5b4b8a',distro:'NT'},
+  'NET':{on:true,color:'#5b4b8a',distro:'NET'},
+  'NLT':{on:true,color:'#f4c7c3',distro:'NLT'},
+  'A':{on:true,color:'#f4c7c3',distro:'A'},
+  'MED':{on:true,color:'#f4c7c3',distro:'MED'},
+  'ART28':{on:true,color:'#f4c7c3',distro:'Art28'},
+  '104':{on:true,color:'#f4c7c3',distro:'104'},
+  'MIX':{on:true,color:'#f4c7c3',distro:'MIX'},
+  'NAF':{on:true,color:'#34c759',distro:'MIX'},
+  'CPL':{on:true,color:'#f4c7c3',distro:'CPL'},
+  'IML':{on:true,color:'#f4c7c3',distro:'IML'},
+  'PL':{on:true,color:'#f4c7c3',distro:'PL'},
+  'LIC':{on:true,color:'#f4c7c3',distro:'LIC'},
+  'OFF':{on:true,color:'#f4c7c3',distro:'OFF'}
+};
+function codeCfg(code){
+  const u=String(code||'').toUpperCase();
+  const d=CODE_DEFAULTS[u]||{on:true,color:'#f4c7c3',distro:u};
+  const saved=(PREFS.codeCfg||{})[u]||{};
+  return {on:saved.on!==false, color:saved.color||d.color, distro:saved.distro!=null?saved.distro:d.distro};
+}
+function codeColor(code){ return codeCfg(code).color; }
+function codeDistroLabel(code){
+  const u=String(code||'').toUpperCase();
+  if(!u) return '';
+  const cfg=codeCfg(u);
+  return cfg.distro!=null && cfg.distro!=='' ? cfg.distro : u;
+}
+function codeEnabled(code){ return codeCfg(code).on!==false; }
 function calChoices(ym){
-  return (monthLocked(ym)?['1ST','2ND','NT']:['1ST','2ND','NT'].concat(CAL_ABS)).concat(['NLT','NET']);
+  const base=monthLocked(ym)?['1ST','2ND','NT']:['1ST','2ND','NT'].concat(CAL_ABS);
+  const extra=['NLT','NET'];
+  return base.concat(extra).filter((c,i,a)=>a.indexOf(c)===i && codeEnabled(c));
 }
 function reqLabel(code, time){
   const u=String(code||'').toUpperCase();
@@ -6398,8 +6528,10 @@ function exportWeekDistro(){
     if(mark) bg='#FFFF00';
     else if(field==='shift' && val==='1ST') bg='#B3CEFB';
     else if(field==='shift' && val==='2ND') bg='#FFC000';
-    else if(field==='shift' && val && !IFTS_CHOICES.includes(val)){ bg='#C22114'; fg='#fff'; }
-    return {val, bg, fg, mark};
+    else if(field==='shift' && val) bg=codeColor(val);
+    else if(field==='shift' && val && !IFTS_CHOICES.includes(val) && !CODE_DEFAULTS[val]){ bg='#C22114'; fg='#fff'; }
+    const shown=field==='shift'?codeDistroLabel(val):val;
+    return {val:shown!=null?shown:val, bg, fg, mark};
   };
   const monLab=d=>d.toLocaleDateString('en-GB',{day:'2-digit', month:'short'}).replace(' ','-');
   const headLab=d=>d.toLocaleDateString('en-GB',{weekday:'short'})+' '+String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0');
@@ -7205,7 +7337,7 @@ function renderOpsCal(){
 }
 
 let TC_YM='', TC_MARK='NIGHT', TC_VIEW='team', TC_IP='', TC_EDIT_IP='', TC_DIRTY=false, TC_CAT='all';
-const TC_SHIFT=['','1ST','2ND','NT','NET','NLT','NIT','A','MED','ART28','104','PL','LIC','OFF','MIX','IML','CPL'];
+const TC_SHIFT=['','1ST','2ND','NT','NET','NLT','NIT','A','MED','ART28','104','PL','LIC','OFF','MIX','IML','CPL','NAF'];
 function teamCalNames(){
   const base=(isCalOnly() && Array.isArray(PREFS.calRoster) && PREFS.calRoster.length)?PREFS.calRoster:selectedIPs();
   return base.slice().sort((a,b)=>{
@@ -7227,9 +7359,10 @@ function toneOf(code){
   if(u==='1ST') return 'c-1st';
   if(u==='2ND') return 'c-2nd';
   if(u==='NT'||u==='NIT'||u==='NET'||u==='NIGHT') return 'c-nit';
+  if(u==='NAF') return 'c-naf';
   if(['A','MED','LIC','MIX','OFF','NLT','IML','CPL','ART28','104','PL'].includes(u)) return 'c-abs';
   if(!u) return '';
-  if(!IFTS_CODES.has(u) && !IFTS_CHOICES.includes(u)) return 'c-bad';
+  if(!IFTS_CODES.has(u) && !IFTS_CHOICES.includes(u) && !CODE_DEFAULTS[u]) return 'c-bad';
   return 'c-ok';
 }
 function tcShiftMonth(n){
@@ -7370,11 +7503,12 @@ function renderTeamCal(){
       const show=pend?pend.code:eff;
       const showTime=(pend&&pend.time)?pend.time:(appr&&appr.time?appr.time:'');
       const showLab=reqLabel(show, showTime);
+      const cellBg=show?('background:'+codeColor(show)+';color:#111'):'';
       const cls=toneOf(show)+(pend?' pend':'');
       const tip=pend?('Requested '+showLab+' · approved '+(eff||'—')):(showLab||'');
       const rej=rejectedReq(name, iso);
       const night=dayMark(iso)==='NIGHT'?'☾ ':'';
-      h+=`<td class="tc-cell ${wk} ${cls}" data-ip="${esc(name)}" data-iso="${iso}" title="${esc(tip+(rej?' · request rejected':''))}">${night}${esc(showLab||'')}${rej?'<span class="rej" title="Rejected. The day is clear. A new request can be made.">⚠</span>':''}${pend&&eff&&pend.code!==eff?`<span class="tc-req">${esc(eff)}</span>`:''}</td>`;
+      h+=`<td class="tc-cell ${wk} ${cls}" data-ip="${esc(name)}" data-iso="${iso}" title="${esc(tip+(rej?' · request rejected':''))}" style="${cellBg}">${night}${esc(showLab||'')}${rej?'<span class="rej" title="Rejected. The day is clear. A new request can be made.">⚠</span>':''}${pend&&eff&&pend.code!==eff?`<span class="tc-req">${esc(eff)}</span>`:''}</td>`;
     }
     h+='</tr>';
   });
@@ -7528,7 +7662,7 @@ function individualYearHtml(year, name){
       const rej=rejectedReq(name, iso);
       const moon=mk==='NIGHT'?'☾':'';
       const gcal=show?('<a class="tc-gcal" href="'+gcalDayUrl(name, iso, codeLabel(show)||show, !!pend)+'" target="_blank" rel="noopener" title="Add this day to Google Calendar">G</a>'):'';
-      cells+='<div class="ios-cell tc-cell '+wk+today+' '+toneOf(show)+flag+'" data-ip="'+esc(name)+'" data-iso="'+iso+'" title="'+esc(iso+' '+wdN[dow]+' '+(showLab||'')+(lab2?' '+lab2:'')+(rej?' rejected':''))+'"><span class="n">'+moon+d+'</span><span class="tc-wd">'+wdN[dow]+'</span>'+(show?'<span class="cd">'+esc(showLab)+'</span>':'')+(rej?'<span class="rej" title="Rejected. The day is clear. You can request again.">⚠</span>':'')+(lab2 && mk!=='NIGHT'?'<span class="tc-mk '+mk+'">'+esc(lab2)+'</span>':'')+dot+gcal+'</div>';
+      cells+='<div class="ios-cell tc-cell '+wk+today+' '+toneOf(show)+flag+'" data-ip="'+esc(name)+'" data-iso="'+iso+'" style="'+(show?'background:'+codeColor(show)+';color:#111':'')+'" title="'+esc(iso+' '+wdN[dow]+' '+(showLab||'')+(lab2?' '+lab2:'')+(rej?' rejected':''))+'"><span class="n">'+moon+d+'</span><span class="tc-wd">'+wdN[dow]+'</span>'+(show?'<span class="cd">'+esc(showLab)+'</span>':'')+(rej?'<span class="rej" title="Rejected. The day is clear. You can request again.">⚠</span>':'')+(lab2 && mk!=='NIGHT'?'<span class="tc-mk '+mk+'">'+esc(lab2)+'</span>':'')+dot+gcal+'</div>';
     }
     for(let i=first+dim;i<42;i++) cells+='<div class="ios-cell pad"></div>';
     months.push('<section class="ios-month'+(locked?' is-locked':'')+'"><div class="ios-mh">'+esc(lab)+(locked?' <span class="locktag">Locked</span>':'')+' <button type="button" class="lockbtn" data-lock="'+ym+'">'+lockGlyph(ym)+'</button></div><div class="ios-dow"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div><div class="ios-grid">'+cells+'</div></section>');
@@ -7748,6 +7882,7 @@ function canEditCal(){
 function setView(v){
   if(v==='perip'||v==='review'||v==='opscal') v=isAdmin()?'tables':'dashboard';
   if(isCalOnly() && v!=='teamcal') v='teamcal';
+  else if(v==='lndcal' && !isAdmin() && !isSchedRole()) v='dashboard';
   else if(v==='settings' && !isAdmin()) v='dashboard';
   else if(v==='hours' && !isAdmin() && !isSchedRole()) v='dashboard';
   else if(STATS_VIEWS.has(v) && v!=='hours' && !isAdmin()) v='dashboard';
@@ -7767,6 +7902,7 @@ function setView(v){
   if(v==='silef') renderSilef();
   if(v==='opscal') renderOpsCal();
   if(v==='teamcal') renderTeamCal();
+  if(v==='lndcal') renderLndCal();
   if(v==='dashboard') renderDashboard();
   if(v==='settings') renderSettings();
 }
@@ -7798,6 +7934,7 @@ async function refresh(){
   if(active==='silef') renderSilef();
   if(active==='opscal') renderOpsCal();
   if(active==='teamcal') renderTeamCal();
+  if(active==='lndcal') renderLndCal();
   if(active==='dashboard') renderDashboard();
   if(active==='settings') renderSettings();
 }
@@ -7950,6 +8087,7 @@ function applyRoleNav(){
     if(el.classList.contains('nav-fh') || (el.classList.contains('nav-group') && (leader || sched))) el.style.display=(leader || sched) && !cal ? '' : 'none';
     else el.style.display=(leader && !cal)?'':'none';
   });
+  $$('.nav-leonardo').forEach(el=>{ el.style.display=((leader || sched) && !cal)?'':'none'; });
   $$('.nav-leader').forEach(el=>{ el.style.display=(leader && !cal)?'':'none'; });
   $$('.nav-app').forEach(el=>{ el.style.display=cal?'none':''; });
   $$('#sideNav .tab').forEach(el=>{
@@ -8133,6 +8271,11 @@ const tcIp=$('#tcIp');
 if(tcIp) tcIp.onchange=()=>{ TC_IP=tcIp.value; renderTeamCal(); };
 const tcPrint=$('#tcPrint'); if(tcPrint) tcPrint.onclick=printTeamMonth;
 const tcIcs=$('#tcIcs'); if(tcIcs) tcIcs.onclick=exportPersonalIcs;
+const lndPrev=$('#lndPrev'), lndNext=$('#lndNext'), lndToday=$('#lndToday'), lndPrint=$('#lndPrint');
+if(lndPrev) lndPrev.onclick=()=>{ const [y,m]= (LND_YM||isoToday().slice(0,7)).split('-').map(Number); const d=new Date(y, m-2, 1); LND_YM=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); renderLndCal(); };
+if(lndNext) lndNext.onclick=()=>{ const [y,m]= (LND_YM||isoToday().slice(0,7)).split('-').map(Number); const d=new Date(y, m, 1); LND_YM=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); renderLndCal(); };
+if(lndToday) lndToday.onclick=()=>{ LND_YM=isoToday().slice(0,7); renderLndCal(); };
+if(lndPrint) lndPrint.onclick=printLndCal;
 const saveFlagBtn=$('#saveFlag'); if(saveFlagBtn) saveFlagBtn.onclick=()=>{ saveFromFlag(); };
 const tcChange=$('#tcChangeIp');
 if(tcChange) tcChange.onclick=async()=>{
