@@ -2036,7 +2036,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.17';
+const APP_VERSION = '2.18';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return !!(SUPABASE_URL && SUPABASE_KEY); }
@@ -5582,7 +5582,7 @@ const LND_ABS=new Set(['IML','CPL','A','MIX','NAF','ART28','104']);
 let LND_YM='';
 function lndLabel(code){
   const u=String(code||'').toUpperCase();
-  return LND_ABS.has(u) ? 'N/A' : u;
+  return LND_ABS.has(u) ? 'N/A' : '';
 }
 function renderLndCal(){
   const body=$('#lndBody'); if(!body) return;
@@ -5591,7 +5591,18 @@ function renderLndCal(){
   const title=$('#lndTitle');
   if(title) title.textContent=new Date(yy, mm-1, 1).toLocaleString('en-GB',{month:'long', year:'numeric'});
   const names=teamCalNames();
+  const fly=names.filter(n=>roleOf(iftsMatchName(n))!=='sim');
+  const sim=names.filter(n=>roleOf(iftsMatchName(n))==='sim');
   const dim=new Date(yy, mm, 0).getDate();
+  const present=(list, iso)=>{
+    if(!list.length) return null;
+    let p=0;
+    list.forEach(n=>{
+      const eff=effectiveShift(n, iso, baseShiftOf(n, iso));
+      if(!LND_ABS.has(String(eff||'').toUpperCase())) p++;
+    });
+    return Math.round(100*p/list.length);
+  };
   let h='<div class="tc-wrap"><table class="tc"><thead><tr><th class="nm">Instructor</th>';
   for(let day=1;day<=dim;day++){
     const iso=LND_YM+'-'+String(day).padStart(2,'0');
@@ -5605,13 +5616,33 @@ function renderLndCal(){
     for(let day=1;day<=dim;day++){
       const iso=LND_YM+'-'+String(day).padStart(2,'0');
       const eff=effectiveShift(name, iso, baseShiftOf(name, iso));
-      const lab=lndLabel(eff);
-      const bg=lab==='N/A'?'#d0d0d6':(eff?codeColor(eff):'');
-      h+=`<td class="${isFeria(iso)?'wknd feria':''}" style="${bg?'background:'+bg+';color:#111':''}">${esc(lab||'')}</td>`;
+      const na=LND_ABS.has(String(eff||'').toUpperCase());
+      h+=`<td class="${isFeria(iso)?'wknd feria':''}" style="${na?'background:#d0d0d6;color:#333':''}">${na?'N/A':''}</td>`;
     }
     h+='</tr>';
   });
-  h+='</tbody></table></div>';
+  const flyDays=[], simDays=[];
+  h+='<tr><td class="nm">FLY presence</td>';
+  for(let day=1;day<=dim;day++){
+    const iso=LND_YM+'-'+String(day).padStart(2,'0');
+    const pct=present(fly, iso);
+    if(pct!=null) flyDays.push(pct);
+    const low=pct!=null && pct<80;
+    h+=`<td class="${isFeria(iso)?'wknd feria':''}" style="${low?'background:#ffd0cc;color:#9b1c1c;font-weight:750':''}">${pct==null?'':pct+'%'}</td>`;
+  }
+  h+='</tr><tr><td class="nm">SIM presence</td>';
+  for(let day=1;day<=dim;day++){
+    const iso=LND_YM+'-'+String(day).padStart(2,'0');
+    const pct=present(sim, iso);
+    if(pct!=null) simDays.push(pct);
+    const low=pct!=null && pct<80;
+    h+=`<td class="${isFeria(iso)?'wknd feria':''}" style="${low?'background:#ffd0cc;color:#9b1c1c;font-weight:750':''}">${pct==null?'':pct+'%'}</td>`;
+  }
+  h+='</tr></tbody></table></div>';
+  const avg=a=>a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):null;
+  const fa=avg(flyDays), sa=avg(simDays);
+  h+='<div class="cal-tot"><b>FLY monthly average '+(fa==null?'—':fa+'%')+'</b><b>SIM monthly average '+(sa==null?'—':sa+'%')+'</b></div>';
+  h+='<p class="hint">Only absences are shown (N/A). A day is present when it is not IML, CPL, A, MIX, NAF, Art28 or 104. Presence below 80% is marked in red.</p>';
   body.innerHTML=h||emptyBlock('No instructors.');
 }
 function printLndCal(){
