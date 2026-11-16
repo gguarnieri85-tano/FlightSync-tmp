@@ -571,7 +571,7 @@ html.dark .ifts th{background:#2c2c2e} html.dark .ifts th.nm{background:#2c2c2e}
 .c-naf{background:#34c759;color:#0b3d16;font-weight:700}
 .ios-cell.c-naf{background:#34c759;color:#0b3d16}
 .tc-cell.pend,.ifts-code.pend{position:relative}
-.tc-cell.pend::after,.ifts-code.pend::after{content:"";position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:50%;background:#e10600;box-shadow:0 0 0 1px #fff}
+.tc-cell.pend::after,.ifts-code.pend::after{content:"";position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:50%;background:#f5c518;box-shadow:0 0 0 1px #fff}
 .center-box{display:none;position:fixed;inset:0;z-index:260;background:#0008;align-items:center;justify-content:center;padding:24px}
 .center-box.show{display:flex}
 .center-card{width:min(440px,100%);background:var(--card);color:var(--text);border-radius:18px;padding:26px 22px 20px;text-align:center;box-shadow:0 18px 50px #0007}
@@ -2036,7 +2036,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.21';
+const APP_VERSION = '2.22';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return !!(SUPABASE_URL && SUPABASE_KEY); }
@@ -7489,7 +7489,7 @@ function renderTeamCal(){
   const title=$('#tcTitle');
   const today=isoToday();
   const markLab={NIGHT:'☾', RANGE:'R', HOL:'H', NOFLY:'X'};
-  let h='<div class="tc-legend"><span><i style="background:#B3CEFB"></i>1ST</span><span><i style="background:#FFC000"></i>2ND</span><span><i style="background:#5b4b8a"></i>NT</span><span><i style="background:#f4c7c3"></i>Absence</span><span><i style="background:#d5d5dc"></i>Feria</span><span><i style="background:#e10600;border-radius:50%"></i>Waiting</span><span><i style="background:#34c759;border-radius:50%"></i>Approved</span></div>';
+  let h='<div class="tc-legend"><span><i style="background:#B3CEFB"></i>1ST</span><span><i style="background:#FFC000"></i>2ND</span><span><i style="background:#5b4b8a"></i>NT</span><span><i style="background:#f4c7c3"></i>Absence</span><span><i style="background:#d5d5dc"></i>Feria</span><span><i style="background:#f5c518;border-radius:50%"></i>Waiting</span><span><i style="background:#34c759;border-radius:50%"></i>Approved</span></div>';
   if(isCalOnly() && TC_IP) h='<p class="hint">'+esc(TC_IP)+' · '+yy+' · your year. Red dot is waiting, green dot is approved.</p>'+h;
   if(!names.length){
     if(title) title.textContent='';
@@ -7700,7 +7700,7 @@ function individualYearHtml(year, name){
       if(dow>=1 && dow<=5 && !hol && !abs.has(bucket)) presence++;
       const mk=dayMark(iso);
       const lab2=mkName(mk);
-      const dot=pend?'<i class="dot r" title="Waiting approval"></i>':(hasAppr?'<i class="dot g" title="Approved"></i>':'');
+      const dot=pend?'<i class="dot y" title="Waiting approval"></i>':(hasAppr?'<i class="dot g" title="Approved"></i>':'');
       const flag=(!pend && hasAppr)?' okd':'';
       const rej=rejectedReq(name, iso);
       const moon=mk==='NIGHT'?'☾':'';
@@ -7793,7 +7793,7 @@ function printCalHtml(title, inner, opts){
     '.ios-cell.c-nit,.cal-tot b.c-nit,td.c-nit{background:#5b4b8a;color:#fff}'+
     '.ios-cell.c-abs,.cal-tot b.c-abs,td.c-abs{background:#f4c7c3;color:#7a1212}'+
     'table{border-collapse:collapse;width:100%;font-size:8px}th,td{border:1px solid #bbb;padding:1px 2px;text-align:center}td.nm,th.nm{text-align:left;font-weight:700}.wknd{background:#f2f2f7}'+
-    '.dot{display:inline-block;width:4px;height:4px;border-radius:50%}.dot.r{background:#e10600}.dot.g{background:#34c759}'+
+    '.dot{display:inline-block;width:4px;height:4px;border-radius:50%}.dot.r{background:#e10600}.dot.g{background:#34c759}.dot.y{background:#f5c518}'+
     '.okd{box-shadow:inset 0 0 0 1px #34c759}';
   w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>'+title+'</title><style>'+css+'</style></head><body><div class="sheet"><h1>'+title+'</h1><p class="meta">'+stamp+'</p>'+inner+'</div></body></html>');
   w.document.close();
