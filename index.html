@@ -2036,7 +2036,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.19';
+const APP_VERSION = '2.20';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return !!(SUPABASE_URL && SUPABASE_KEY); }
@@ -5455,10 +5455,13 @@ function renderIfts(){
       const rej=rejectedReq(name, iso);
       const chip=iftsCodeClass(eff, marked)+(pend?' pend':'');
       const shown=codeDistroLabel(eff);
+      const gray=distroGray(eff);
+      const chipBg=gray?'#e8e8e8':(eff?codeColor(eff):'');
+      const chipFg=gray?'#8a8a8a':'#111';
       const tip=pend?('Approved '+ (shown||'—')+' · requested '+(pend.code||'—')):(shown||'')+(rej?' · request rejected':'');
-      h+=`<td class="ifts-cell${wk}${exp?' c-exp':''}" title="${esc(name)} ${iso} ${esc(tip)}" style="${eff&&!marked?'background:'+codeColor(eff):''}">`+
+      h+=`<td class="ifts-cell${wk}${exp?' c-exp':''}" title="${esc(name)} ${iso} ${esc(tip)}" style="${eff&&!marked?'background:'+chipBg:''}">`+
         (editable
-          ? `<div class="ifts-line"><span class="ifts-code ${chip}" data-ip="${esc(name)}" data-iso="${iso}" style="${eff&&!marked?'background:'+codeColor(eff)+';color:#111':''}">${esc(shown||'—')}</span>${rej?'<span class="rej" title="Rejected">⚠</span>':''}<input type="checkbox" class="ifts-tick" data-ip="${esc(name)}" data-iso="${iso}" ${marked?'checked':''} title="Yellow in Week Distro"><input class="ifts-note" data-ip="${esc(name)}" data-iso="${iso}" value="${esc(note).replace(/"/g,'"')}" placeholder="note" title="Note"></div>`
+          ? `<div class="ifts-line"><span class="ifts-code ${chip}" data-ip="${esc(name)}" data-iso="${iso}" style="${eff&&!marked?'background:'+chipBg+';color:'+chipFg:''}">${esc(shown||'—')}</span>${rej?'<span class="rej" title="Rejected">⚠</span>':''}<input type="checkbox" class="ifts-tick" data-ip="${esc(name)}" data-iso="${iso}" ${marked?'checked':''} title="Yellow in Week Distro"><input class="ifts-note" data-ip="${esc(name)}" data-iso="${iso}" value="${esc(note).replace(/"/g,'"')}" placeholder="note" title="Note"></div>`
           : `${esc(shown||'')}${rej?'<span class="rej" title="Rejected">⚠</span>':''}`)+
         `</td>`;
     });
@@ -6209,8 +6212,13 @@ function codeColor(code){ return codeCfg(code).color; }
 function codeDistroLabel(code){
   const u=String(code||'').toUpperCase();
   if(!u) return '';
+  if(u==='NAF') return 'MIX';
   const cfg=codeCfg(u);
   return cfg.distro!=null && cfg.distro!=='' ? cfg.distro : u;
+}
+function distroGray(code){
+  const u=String(code||'').toUpperCase();
+  return ['CPL','MIX','IML','A','NAF'].includes(u);
 }
 function codeEnabled(code){ return codeCfg(code).on!==false; }
 function calChoices(ym){
@@ -6558,6 +6566,7 @@ function exportWeekDistro(){
     const mark=!!p.mark;
     let bg='#ffffff', fg='#002060';
     if(mark) bg='#FFFF00';
+    else if(field==='shift' && distroGray(val)){ bg='#e8e8e8'; fg='#8a8a8a'; }
     else if(field==='shift' && val==='1ST') bg='#B3CEFB';
     else if(field==='shift' && val==='2ND') bg='#FFC000';
     else if(field==='shift' && val) bg=codeColor(val);
@@ -6596,6 +6605,7 @@ function exportWeekDistro(){
   const shiftBg=code=>{
     if(code==='1ST') return ['#B3CEFB','#002060'];
     if(code==='2ND') return ['#FFC000','#002060'];
+    if(distroGray(code)) return ['#e8e8e8','#8a8a8a'];
     if(code==='LD') return ['#C22114','#fff'];
     if(code==='NT'||code==='NIT') return ['#595959','#fff'];
     if(!IFTS_CHOICES.includes(code)) return ['#C22114','#fff'];
@@ -6606,7 +6616,8 @@ function exportWeekDistro(){
     names.forEach(n=>{
       const s=(byDay[i][n]&&byDay[i][n].shift)||'';
       if(!s) return;
-      bag[s]=(bag[s]||0)+1;
+      const lab=codeDistroLabel(s);
+      bag[lab]=(bag[lab]||0)+1;
     });
     const order=[...IFTS_CHOICES];
     Object.keys(bag).forEach(c=>{ if(!order.includes(c)) order.push(c); });
