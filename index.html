@@ -2038,7 +2038,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.24';
+const APP_VERSION = '2.25';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return !!(SUPABASE_URL && SUPABASE_KEY); }
@@ -5663,7 +5663,7 @@ function printLndCal(){
   const avgs=body?[...body.querySelectorAll('.cal-tot b')].map(b=>b.textContent).join(' · '):'';
   const w=window.open('','_blank');
   if(!w){ toast('Allow pop-ups to print'); return; }
-  w.document.write('<html><head><title>ACS - IFTS Calendar</title><style>@page{size:A4 landscape;margin:6mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,Helvetica,sans-serif;margin:0;color:#111}h1{font-size:16px;margin:0 0 2mm}p{font-size:10px;margin:0 0 3mm;color:#111}table{width:100%;border-collapse:collapse;font-size:8px}th,td{border:1px solid #bbb;padding:1px 2px;text-align:center}th.nm,td.nm{text-align:left;white-space:nowrap}</style></head><body><h1>ACS - IFTS Calendar</h1><p>'+esc(month)+(avgs?' · '+esc(avgs):'')+'</p>'+(table?table.outerHTML:'')+'</body></html>');
+  w.document.write('<html><head><title>ACS - IFTS Calendar</title><style>@page{size:A4 landscape;margin:6mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,Helvetica,sans-serif;margin:0;color:#111}h1{font-size:16px;margin:0 0 2mm}p{font-size:10px;margin:0 0 3mm;color:#111}table{width:100%;border-collapse:collapse;font-size:8px}th,td{border:1px solid #bbb;padding:1px 2px;text-align:center}th.nm,td.nm{text-align:left;white-space:nowrap}tbody tr:nth-child(odd) td{background:#fff}tbody tr:nth-child(even) td{background:#ececef}thead th{background:#d9d9d9}</style></head><body><h1>ACS - IFTS Calendar</h1><p>'+esc(month)+(avgs?' · '+esc(avgs):'')+'</p>'+(table?table.outerHTML:'')+'</body></html>');
   w.document.close();
   setTimeout(()=>{ w.focus(); w.print(); }, 200);
 }
