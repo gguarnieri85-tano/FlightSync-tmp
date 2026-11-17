@@ -2039,7 +2039,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.27';
+const APP_VERSION = '2.28';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return false; }
@@ -8274,13 +8274,13 @@ const refreshBtn=$('#refreshBtn');
 if(folderBtn) folderBtn.onclick=async()=>{
   const dir=await pickAppFolder();
   if(!dir) return;
-  folderBtn.innerHTML='<span class="ti">📁</span>'+esc(dir.name||'Database folder');
+  folderBtn.innerHTML='<span class="ti">📁</span>Database folder';
   try{ await loadNewestPair(); }
   catch(e){ toast('Folder linked. Could not load a Database yet.'); }
 };
 function paintFolderBtn(){
   const b=$('#folderBtn'); if(!b) return;
-  b.innerHTML='<span class="ti">📁</span>'+(PREFS.folderLinkedName||'Database folder');
+  b.innerHTML='<span class="ti">📁</span>Database folder';
 }
 if(refreshBtn) refreshBtn.onclick=async()=>{
   refreshBtn.disabled=true;
