@@ -103,7 +103,7 @@ body{
 #saveStateBtn.ok{color:#0b6b2f;background:#d8f5e3}
 #saveStateBtn.warn{color:#7a5200;background:#ffe39a}
 #newChangesBtn:hover{filter:brightness(.97)}
-body.role-cal #sideNav .tab:not([data-view="teamcal"]):not([data-view="personal"]):not(#signOutBtn):not(#refreshBtn):not(#folderBtn):not(#newChangesBtn):not(#saveStateBtn),
+body.role-cal #sideNav .tab:not([data-view="teamcal"]):not(#signOutBtn):not(#refreshBtn):not(#folderBtn):not(#newChangesBtn):not(#saveStateBtn),
 body.role-cal #sideNav .nav-group,
 body.role-cal .bar-ops,
 body.role-cal .lockbtn{display:none !important}
@@ -2043,7 +2043,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.35';
+const APP_VERSION = '2.36';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return false; }
@@ -5834,7 +5834,10 @@ async function afterLogin(){
     dir=await pickAppFolder();
     if(!dir) return;
   }
-  try{ await loadNewestPair(); }
+  try{
+    if(isCalOnly()) await loadCalendarOnly();
+    else await loadNewestPair();
+  }
   catch(e){ await centerDone(false,'Update failed', e.message||String(e)); }
 }
 async function pickAppFolder(){
@@ -5880,7 +5883,7 @@ async function pruneKept(dir, test, keepName){
     rows.push({name, stamp:Math.max(dbStampFromName(name)||0, lm||0)});
   }
   rows.sort((a,b)=>(b.stamp-a.stamp)||b.name.localeCompare(a.name));
-  const keep=new Set(rows.slice(0,5).map(r=>r.name));
+  const keep=new Set(rows.slice(0,10).map(r=>r.name));
   if(keepName) keep.add(keepName);
   const doomed=rows.filter(r=>!keep.has(r.name)).map(r=>r.name);
   if(!doomed.length) return;
@@ -5890,7 +5893,7 @@ async function pruneKept(dir, test, keepName){
     fresh.push({name, stamp:dbStampFromName(name)||0});
   }
   fresh.sort((a,b)=>(b.stamp-a.stamp)||b.name.localeCompare(a.name));
-  const still=new Set(fresh.slice(0,5).map(r=>r.name));
+  const still=new Set(fresh.slice(0,10).map(r=>r.name));
   if(keepName) still.add(keepName);
   for(const name of doomed){
     if(still.has(name)) continue;
@@ -6015,7 +6018,7 @@ async function saveCalendarFile(opts){
     CAL_AHEAD=false;
     paintCalAhead();
     paintSaveFlag();
-    if(!quiet) await centerDone(true,'Calendar saved','Folder: '+(res.folder||dir.name||'')+'\nFile: '+fname+'\nOnly the 5 newest calendar files are kept.');
+    if(!quiet) await centerDone(true,'Calendar saved','Folder: '+(res.folder||dir.name||'')+'\nFile: '+fname+'\nOnly the 10 newest calendar files are kept.');
   } else if(!quiet){
     await centerDone(false,'Calendar not saved', (res&&res.error)||'Could not write the calendar file');
   }
@@ -6195,7 +6198,7 @@ async function saveSnapshot(opts){
   if(!quiet){
     TC_DIRTY=false;
     const bar=$('#tcDirty'); if(bar) bar.style.display='none';
-    await centerDone(true,'Database saved', 'Folder: '+(res.folder||dir.name||'')+'\nFile: '+fname+'\nThe calendar is inside this file.\nOnly the 5 newest Database files are kept.');
+    await centerDone(true,'Database saved', 'Folder: '+(res.folder||dir.name||'')+'\nFile: '+fname+'\nOnly the 10 newest Database files are kept.');
   }
   } finally {
     SAVING=false;
@@ -8042,7 +8045,7 @@ function canEditCal(){
 
 function setView(v){
   if(v==='perip'||v==='review'||v==='opscal') v=isAdmin()?'tables':'dashboard';
-  if(isCalOnly() && v!=='teamcal' && v!=='personal') v='teamcal';
+  if(isCalOnly() && v!=='teamcal') v='teamcal';
   else if(v==='lndcal' && !isAdmin() && !isSchedRole()) v='dashboard';
   else if(v==='settings' && !isAdmin()) v='dashboard';
   else if(v==='hours' && !isAdmin() && !isSchedRole()) v='dashboard';
@@ -8249,13 +8252,13 @@ function applyRoleNav(){
     else el.style.display=(leader && !cal)?'':'none';
   });
   $$('.nav-leonardo').forEach(el=>{ el.style.display=((leader || sched) && !cal)?'':'none'; });
-  $$('.nav-personal').forEach(el=>{ el.style.display=''; });
+  $$('.nav-personal').forEach(el=>{ el.style.display=cal?'none':''; });
   $$('.nav-leader').forEach(el=>{ el.style.display=(leader && !cal)?'':'none'; });
   $$('.nav-app').forEach(el=>{ el.style.display=cal?'none':''; });
   $$('#sideNav .tab').forEach(el=>{
     if(el.id==='signOutBtn' || el.id==='refreshBtn' || el.id==='folderBtn' || el.id==='saveStateBtn'){ el.style.display=''; return; }
     if(el.id==='newChangesBtn') return;
-    if(cal && el.dataset.view!=='teamcal' && el.dataset.view!=='personal') el.style.display='none';
+    if(cal && el.dataset.view!=='teamcal') el.style.display='none';
     else if(el.classList.contains('nav-fh')) el.style.display=((leader || isSchedRole()) && !cal)?'':'none';
     else if(el.classList.contains('nav-stats')) el.style.display=(leader && !cal)?'':'none';
     else if(!cal && el.classList.contains('nav-app')) el.style.display='';
@@ -8268,7 +8271,7 @@ function applyRoleNav(){
   paintPassBox();
   if(cal){
     const cur=$('.tab.active');
-    if(!cur || (cur.dataset.view!=='teamcal' && cur.dataset.view!=='personal')) setView('teamcal');
+    if(!cur || cur.dataset.view!=='teamcal') setView('teamcal');
   } else if(!leader){
     const cur=$('.tab.active');
     if(cur && STATS_VIEWS.has(cur.dataset.view) && !(cur.dataset.view==='hours' && isSchedRole())) setView('dashboard');
@@ -8407,9 +8410,13 @@ if(refreshBtn) refreshBtn.onclick=async()=>{
       dir=await pickAppFolder();
       if(!dir){ toast('Choose the Database folder first'); return; }
     }
-    const status=await pullFolderDb({silent:false, preferFolder:true});
-    if(status==='none') toast('No Database file in that folder');
-    else toast(status==='current'?'Already using the newest Database':'Database refreshed');
+    if(isCalOnly()){
+      await loadCalendarOnly();
+    } else {
+      const status=await pullFolderDb({silent:false, preferFolder:true});
+      if(status==='none') toast('No Database file in that folder');
+      else toast(status==='current'?'Already using the newest Database':'Database refreshed');
+    }
     paintNewChanges(false);
   }catch(e){
     toast('Could not refresh the database');
