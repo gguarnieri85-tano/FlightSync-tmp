@@ -2039,7 +2039,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.30';
+const APP_VERSION = '2.31';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return false; }
@@ -2264,13 +2264,18 @@ function markDbDirty(){
 }
 let cloudTimer=null;
 let SAVING=false;
+let SAVE_AGAIN=false;
 function scheduleCloudSave(){
-  if(!isUnlocked() || SAVING) return;
+  if(!isUnlocked()) return;
+  if(SAVING){ SAVE_AGAIN=true; return; }
   clearTimeout(cloudTimer);
   cloudTimer=setTimeout(()=>{ cloudTimer=null; saveSnapshot({full:true, quiet:true}); }, 700);
 }
 async function saveFromFlag(){
-  await saveSnapshot({full:true});
+  const btn=$('#tcSave');
+  if(btn) btn.disabled=true;
+  try{ await saveSnapshot({full:true}); }
+  finally{ if(btn) btn.disabled=false; }
   TC_DIRTY=false; DB_DIRTY=false;
   paintSaveFlag();
 }
@@ -5990,8 +5995,13 @@ async function readNewestDbObject(dir){
 }
 async function saveSnapshot(opts){
   if(!(opts&&opts.full)) return saveCalendarFile(opts||{});
+  if(SAVING){ SAVE_AGAIN=true; return; }
+  SAVING=true;
+  SAVE_AGAIN=false;
+  clearTimeout(cloudTimer); cloudTimer=null;
+  const quiet=!!(opts&&opts.quiet);
+  try{
   if(cloudOn()){
-    const quiet=!!(opts&&opts.quiet);
     if(!quiet) centerBusy('Saving Database','Writing the shared Database…');
     try{
       const localSet=settingMap(await DB.allSettings().catch(()=>[]));
@@ -6021,7 +6031,6 @@ async function saveSnapshot(opts){
     }
     return;
   }
-  const quiet=!!(opts&&opts.quiet);
   const full=!!(opts&&opts.full);
   const ip=opts&&opts.ip;
   let dir=null;
@@ -6031,12 +6040,9 @@ async function saveSnapshot(opts){
     dir=await ensureLinkedFolder(full?'export':'calendar');
     if(!dir) return;
   }
-  if(SAVING) return;
-  SAVING=true;
-  clearTimeout(cloudTimer); cloudTimer=null;
   if(!quiet) centerBusy('Saving Database','Writing one Database file…');
   let written='', fname='', res=null;
-  try{
+  {
     let disk=null;
     try{ disk=await readNewestDbObject(dir); }catch(e){}
     const diskObj=(disk&&disk.obj)||{};
@@ -6081,14 +6087,13 @@ async function saveSnapshot(opts){
       CALDB_BASE_MARKS=Object.assign({}, dayMarks);
       CALDB_BASE_LOCK=Object.assign({}, monthLock);
     }
-  } finally {
-    SAVING=false;
   }
   if(!res || !res.ok){
     if(res && !res.ok && res.needFolder && !quiet){
       centerHide();
       const picked=await pickAppFolder();
       if(!picked){ await centerDone(false,'Save failed','The Database was not saved.'); return; }
+      SAVING=false;
       return saveSnapshot(opts);
     }
     if(!quiet) await centerDone(false,'Save failed', (res&&res.error)||'Could not write the Database');
@@ -6110,6 +6115,10 @@ async function saveSnapshot(opts){
     TC_DIRTY=false;
     const bar=$('#tcDirty'); if(bar) bar.style.display='none';
     await centerDone(true,'Database saved', 'Folder: '+(res.folder||dir.name||'')+'\nFile: '+fname+'\nThe calendar is inside this file.\nOnly the 5 newest Database files are kept.');
+  }
+  } finally {
+    SAVING=false;
+    if(SAVE_AGAIN){ SAVE_AGAIN=false; scheduleCloudSave(); }
   }
 }
 async function saveCalendardb(opts){
