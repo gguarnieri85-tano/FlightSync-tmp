@@ -702,7 +702,7 @@ html.dark .ifts .wknd,html.dark .c-off{background:#1c1c1e}
     </div>
     <div class="dash-card" id="dashDbCard" style="margin-bottom:12px">
       <div class="dash-h"><span class="wico">🗄</span> Database</div>
-      <p class="hint" style="margin:4px 0 8px">The shared database lives in Supabase. Upload an old file to replace it, download a copy, or reset it.</p>
+      <p class="hint" style="margin:4px 0 8px">The Database is saved in the folder you choose on this computer. Upload an old file to replace it, or download a copy.</p>
       <div class="controls">
         <button class="btn mini" id="dashUploadDb" type="button">↑ Upload old database</button>
         <button class="btn mini" id="dashDownloadDb" type="button">↓ Download database</button>
@@ -2038,10 +2038,10 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.25';
+const APP_VERSION = '2.26';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
-function cloudOn(){ return !!(SUPABASE_URL && SUPABASE_KEY); }
+function cloudOn(){ return false; }
 async function cloudStamp(){
   if(!cloudOn()) return 0;
   const res=await fetch(SUPABASE_URL+'/rest/v1/app_state?id=eq.main&select=updated_at',{
@@ -2057,9 +2057,15 @@ function paintNewChanges(on){
   el.style.display=(on && isUnlocked())?'':'none';
 }
 async function checkCloudNewer(){
-  if(!cloudOn() || !isUnlocked()){ paintNewChanges(false); return; }
+  if(!isUnlocked()){ paintNewChanges(false); return; }
   try{
-    const remote=await cloudStamp();
+    const dir=await idbGetHandle();
+    if(!dir){ paintNewChanges(false); return; }
+    let perm='prompt';
+    try{ perm=await dir.queryPermission({mode:'read'}); }catch(e){}
+    if(perm!=='granted'){ paintNewChanges(false); return; }
+    const best=await newestInDir(dir);
+    const remote=best?best.stamp:0;
     const local=PREFS.appliedDbStamp?Date.parse(PREFS.appliedDbStamp):0;
     paintNewChanges(!!remote && remote > (local||0)+3000);
   }catch(e){ paintNewChanges(false); }
@@ -2257,7 +2263,7 @@ function markDbDirty(){
 }
 let cloudTimer=null;
 function scheduleCloudSave(){
-  if(!cloudOn() || !isUnlocked()) return;
+  if(!isUnlocked()) return;
   clearTimeout(cloudTimer);
   cloudTimer=setTimeout(()=>{ cloudTimer=null; saveSnapshot({full:true, quiet:true}); }, 700);
 }
@@ -5794,16 +5800,11 @@ async function loadNewestPair(){
   return status;
 }
 async function afterLogin(){
-  if(cloudOn()){
-    try{ await loadNewestPair(); }
-    catch(e){ await centerDone(false,'Update failed', e.message||String(e)); }
-    startCloudWatch();
-    return;
-  }
+  startCloudWatch();
   let dir=null;
   try{ dir=await idbGetHandle(); }catch(e){}
   if(!dir){
-    const yes=await centerAsk('App folder','This computer has no app folder yet. Choose the folder that contains the HTML.','Choose folder','Later');
+    const yes=await centerAsk('Database folder','Choose the folder that contains the Database. This computer will remember it for Refresh and for saving changes.','Choose folder','Later');
     if(!yes) return;
     dir=await pickAppFolder();
     if(!dir) return;
@@ -6826,7 +6827,7 @@ function renderDashboard(){
     calCard.innerHTML=`<div class="dash-h"><span class="wico">🗓</span> Team Calendar</div>${alert}<p class="hint" style="margin:4px 0 0">Presence is everyone except A, MED, Art28, 104, MIX, IML, CPL and PL.</p>`;
   }
   renderSettings();
-  const resetBtn=$('#dashResetDb'); if(resetBtn) resetBtn.style.display=isAdmin()?'':'none';
+  const resetBtn=$('#dashResetDb'); if(resetBtn) resetBtn.style.display='none';
   const openCal=$('#dashOpenCal'); if(openCal) openCal.onclick=()=>setView('teamcal');
 }
 function mountDashboard(){
@@ -8267,14 +8268,17 @@ if(newChangesBtn) newChangesBtn.onclick=async()=>{
 };
 const refreshBtn=$('#refreshBtn');
 if(refreshBtn) refreshBtn.onclick=async()=>{
-  if(!cloudOn()){ toast('No shared database'); return; }
   refreshBtn.disabled=true;
   try{
-    const obj=await cloudLoad();
-    if(!obj){ toast('The shared database is empty'); return; }
-    await applyDbText(JSON.stringify(obj), 'cloud', Date.parse(obj.savedAt)||Date.now(), true);
-    await refresh();
-    toast('Database refreshed');
+    let dir=null;
+    try{ dir=await idbGetHandle(); }catch(e){}
+    if(!dir){
+      dir=await pickAppFolder();
+      if(!dir){ toast('Choose the Database folder first'); return; }
+    }
+    const status=await pullFolderDb({silent:false, preferFolder:true});
+    if(status==='none') toast('No Database file in that folder');
+    else toast(status==='current'?'Already using the newest Database':'Database refreshed');
     paintNewChanges(false);
   }catch(e){
     toast('Could not refresh the database');
@@ -8502,7 +8506,7 @@ mountDashboard();
   try{ await refresh(); }catch(e){ console.error(e); }
   try{ syncViewbar(); }catch(e){ console.error(e); }
   try{ paintFolderHint(); }catch(e){}
-  if(isUnlocked()){ try{ await pullFolderDb({silent:true}); }catch(e){ console.error(e); } }
+  if(isUnlocked()){ try{ await afterLogin(); }catch(e){ console.error(e); } }
   ALLOW_DIRTY=true;
   paintSaveFlag();
   if(!storageOk) toast('\u26a0 This browser is blocking local storage, so the app runs but will forget everything when closed. Open it from your hosted https link \u2014 not the downloaded file, and not in Private mode \u2014 to save your data.', true);
