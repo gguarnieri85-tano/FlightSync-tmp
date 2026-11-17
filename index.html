@@ -589,7 +589,8 @@ html.dark .ifts th{background:#2c2c2e} html.dark .ifts th.nm{background:#2c2c2e}
 .tc-mk.NIGHT{color:#5b4b8a}.tc-mk.HOL{color:#8a5a00}.tc-mk.NOFLY{color:#9b1c1c}.tc-mk.RANGE{color:#0a6}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:2px;vertical-align:middle}
 .dot.r{background:#e10600}.dot.g{background:#34c759}.dot.y{background:#f5c518}
-.tc-cell.okd{box-shadow:inset 0 0 0 2px #34c759}
+.tc-cell.picked{outline:2px solid #007aff;outline-offset:-2px}
+.tc-selbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 8px;padding:8px;border-radius:10px;background:#fff7d6}
 .ios-year{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .ios-month{background:#fff;border-radius:10px;padding:6px;box-shadow:0 0 0 .5px rgba(0,0,0,.12);color:#111}
 .ios-month.is-locked{box-shadow:0 0 0 2px #e10600;background:#fff5f5}
@@ -2042,7 +2043,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.34';
+const APP_VERSION = '2.35';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return false; }
@@ -2282,10 +2283,20 @@ function scheduleCloudSave(){
 }
 async function saveFromFlag(){
   const btn=$('#tcSave');
+  const state=$('#saveStateBtn');
   if(btn) btn.disabled=true;
-  try{ await saveSnapshot({full:true}); }
-  finally{ if(btn) btn.disabled=false; }
-  TC_DIRTY=false; DB_DIRTY=false;
+  if(state) state.disabled=true;
+  try{
+    if(TC_DIRTY && !DB_DIRTY) await saveCalendarFile();
+    else if(DB_DIRTY && !TC_DIRTY) await saveSnapshot({full:true});
+    else {
+      await saveSnapshot({full:true});
+      if(TC_DIRTY) await saveCalendarFile({quiet:true});
+    }
+  } finally {
+    if(btn) btn.disabled=false;
+    if(state) state.disabled=false;
+  }
   paintSaveFlag();
 }
 function savePref(k){
@@ -5804,15 +5815,13 @@ async function loadNewestPair(){
   }
   let cal=null;
   try{ const dir=await idbGetHandle(); if(dir) cal=await readLatestCalendardb(dir); }catch(e){}
-  const dbTs=PREFS.appliedDbStamp?Date.parse(PREFS.appliedDbStamp):0;
-  const calTs=cal?Math.max(Date.parse(cal.obj&&cal.obj.savedAt)||0, cal.stamp||0):0;
-  if(cal && calTs>dbTs+1500){ applyCalendardb(cal.obj); CAL_AHEAD=true; }
-  else CAL_AHEAD=false;
+  if(cal && cal.obj) applyCalendardb(cal.obj);
+  CAL_AHEAD=false;
   paintCalAhead();
   try{ const dir=await idbGetHandle(); await pruneKept(dir, isGeneralDbName, ''); }catch(e){}
   const line=status==='current'?'The newest Database was already loaded.':'The newest Database is loaded.';
-  const extra=CAL_AHEAD?'\nAn older calendar file was newer. Press Save changes to store it in the Database.':'';
-  await centerDone(true,'Loaded', line+'\nThe calendar is inside the same file.'+extra);
+  const calLine=cal?' The newest calendar file is loaded.':' No separate calendar file yet.';
+  await centerDone(true,'Loaded', line+calLine+'\nDatabase feeds DFS and stats. Calendar file feeds the calendar tabs.');
   return status;
 }
 async function afterLogin(){
@@ -5973,10 +5982,74 @@ async function readLatestCalendardb(dir){
   }catch(e){ return null; }
 }
 async function saveCalendarFile(opts){
-  return saveSnapshot(Object.assign({}, opts||{}, {full:true}));
+  const quiet=!!(opts&&opts.quiet);
+  if(SAVING) return;
+  SAVING=true;
+  let dir=null;
+  try{ dir=await idbGetHandle(); }catch(e){}
+  if(!dir){
+    SAVING=false;
+    if(quiet) return;
+    dir=await pickAppFolder();
+    if(!dir) return;
+    SAVING=true;
+  }
+  if(!quiet) centerBusy('Saving Calendar','Writing the calendar file…');
+  const now=new Date();
+  const pad=n=>String(n).padStart(2,'0');
+  const stamp=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate())+'_'+pad(now.getHours())+'-'+pad(now.getMinutes())+'-'+pad(now.getSeconds())+'-'+String(now.getMilliseconds()).padStart(3,'0')+'_'+Math.random().toString(36).slice(2,6);
+  const fname='Calendardb_'+stamp+'.json';
+  const roster=calendarRoster();
+  const payload={
+    app:'flightsync', kind:'calendardb', version:APP_VERSION, savedAt:now.toISOString(),
+    requests:calRequests(), dayMarks:PREFS.dayMarks||{}, monthLock:PREFS.monthLock||{},
+    distroCell:PREFS.distroCell||{}, calLog:PREFS.calLog||[],
+    ips:roster.ips||[], simIps:roster.simIps||[]
+  };
+  let res=null;
+  try{ res=await writeDbToLinkedFolder(fname, JSON.stringify(payload)); }
+  catch(e){ res={ok:false, error:String(e&&e.message||e)}; }
+  if(res && res.ok){
+    try{ await pruneKept(dir, isCalendardbName, fname); }catch(e){}
+    TC_DIRTY=false;
+    CAL_AHEAD=false;
+    paintCalAhead();
+    paintSaveFlag();
+    if(!quiet) await centerDone(true,'Calendar saved','Folder: '+(res.folder||dir.name||'')+'\nFile: '+fname+'\nOnly the 5 newest calendar files are kept.');
+  } else if(!quiet){
+    await centerDone(false,'Calendar not saved', (res&&res.error)||'Could not write the calendar file');
+  }
+  SAVING=false;
 }
 async function deleteOldCalendardb(dir, keep){
   await pruneKept(dir, isCalendardbName, keep);
+}
+let TC_PICK=new Set();
+function tcPickKey(ip, iso){ return normIp(ip)+'|'+iso; }
+function paintTcPick(){
+  $$('#tcBody .tc-cell[data-ip]').forEach(el=>{
+    el.classList.toggle('picked', TC_PICK.has(tcPickKey(el.dataset.ip, el.dataset.iso)));
+  });
+  const bar=$('#tcSelBar');
+  if(!bar) return;
+  if(!isAdmin() || !TC_PICK.size){ bar.style.display='none'; return; }
+  bar.style.display='flex';
+  const codes=['1ST','2ND','NT','A','MED','ART28','104','MIX','NAF','CPL','IML','PL'];
+  bar.innerHTML='<b>'+TC_PICK.size+' selected</b>'+
+    codes.map(c=>'<button type="button" class="btn mini" data-pick="'+c+'">'+c+'</button>').join('')+
+    '<button type="button" class="btn mini subtle" data-pick="">Clear</button>'+
+    '<button type="button" class="btn mini subtle" data-pick="__none">Cancel</button>';
+  bar.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{
+    if(b.dataset.pick==='__none'){ TC_PICK.clear(); paintTcPick(); return; }
+    const code=b.dataset.pick;
+    [...TC_PICK].forEach(k=>{
+      const [ip, iso]=k.split('|');
+      proposeShift(ip, iso, code);
+    });
+    TC_PICK.clear();
+    paintTcPick();
+    toast(code?('Set '+code+' on the selected cells. Press the yellow button to save.'):'Cleared the selected cells. Press the yellow button to save.');
+  });
 }
 function touchCalendardb(){
   TC_DIRTY=true;
@@ -7517,7 +7590,7 @@ function renderTeamCal(){
   const today=isoToday();
   const markLab={NIGHT:'☾', RANGE:'R', HOL:'H', NOFLY:'X'};
   let h='<div class="tc-legend"><span><i style="background:#B3CEFB"></i>1ST</span><span><i style="background:#FFC000"></i>2ND</span><span><i style="background:#5b4b8a"></i>NT</span><span><i style="background:#f4c7c3"></i>Absence</span><span><i style="background:#d5d5dc"></i>Feria</span><span><i style="background:#f5c518;border-radius:50%"></i>Waiting</span><span><i style="background:#34c759;border-radius:50%"></i>Approved</span></div>';
-  if(isCalOnly() && TC_IP) h='<p class="hint">'+esc(TC_IP)+' · '+yy+' · your year. Red dot is waiting, green dot is approved.</p>'+h;
+  if(isAdmin()) h='<div class="tc-selbar" id="tcSelBar" style="display:none"></div>'+h;
   if(!names.length){
     if(title) title.textContent='';
     body.innerHTML=h+emptyBlock('No selected instructors in this Database.');
@@ -7631,12 +7704,29 @@ function bindTeamCalClicks(){
   });
   $$('#tcBody .tc-cell[data-ip]').forEach(el=>el.onclick=ev=>{
     if(ev.target.closest('.tc-gcal')) return;
+    if(isAdmin() && (ev.shiftKey || ev.metaKey || ev.ctrlKey)){
+      ev.preventDefault();
+      const k=tcPickKey(el.dataset.ip, el.dataset.iso);
+      if(TC_PICK.has(k)) TC_PICK.delete(k); else TC_PICK.add(k);
+      paintTcPick();
+      return;
+    }
     if(!isAdmin() && (el.dataset.iso||'')<=isoToday()){ toast('Only future dates'); return; }
     if(isCalOnly()){
       if(!TC_EDIT_IP || !sameIp(el.dataset.ip, TC_EDIT_IP)) return;
     } else if(!canMarkDays() && !isAdmin()) return;
     ev.stopPropagation();
     openTcMenu(el);
+  });
+  $$('#tcBody th[data-day]').forEach(th=>th.onclick=ev=>{
+    if(!isAdmin()) return;
+    if(!(ev.shiftKey || ev.metaKey || ev.ctrlKey)) return;
+    const iso=th.dataset.day;
+    $$('#tcBody .tc-cell[data-iso="'+iso+'"]').forEach(cell=>{
+      TC_PICK.add(tcPickKey(cell.dataset.ip, iso));
+    });
+    paintTcPick();
+    toast('Selected this day. Choose a code in the yellow bar.');
   });
   $$('#tcBody [data-lock]').forEach(el=>el.onclick=ev=>{ ev.stopPropagation(); toggleMonthLock(el.dataset.lock); });
   $$('#tcBody [data-ok]').forEach(b=>b.onclick=()=>setCalStatus(b.dataset.ok,'approved'));
