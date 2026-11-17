@@ -2043,7 +2043,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.36';
+const APP_VERSION = '2.37';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return false; }
@@ -7542,16 +7542,11 @@ function renderTeamCal(){
   }
   if(seg) seg.style.display='none';
   const todayBtn=$('#tcToday'); if(todayBtn) todayBtn.textContent=isCalOnly()?'This year':'This month';
-  const printBtn=$('#tcPrint'); if(printBtn) printBtn.textContent=isCalOnly()?'Print year':'Print month';
-  const icsBtn=$('#tcIcs'); if(icsBtn) icsBtn.style.display=(isCalOnly()?!!TC_EDIT_IP:names.length)?'':'none';
+  const printBtn=$('#tcPrint'); if(printBtn) printBtn.textContent=isCalOnly()?'Print year':'Print year PDF';
+  const icsBtn=$('#tcIcs'); if(icsBtn) icsBtn.style.display='none';
   const gcalSel=$('#tcGcalIp');
-  if(gcalSel){
-    if(!isCalOnly() && names.length){
-      gcalSel.style.display='';
-      const keep=names.find(n=>sameIp(n, gcalSel.value||TC_IP));
-      gcalSel.innerHTML=names.map(n=>`<option value="${esc(n)}"${n===(keep||names[0])?' selected':''}>${esc(n)}</option>`).join('');
-    } else gcalSel.style.display='none';
-  }
+  if(gcalSel) gcalSel.style.display='none';
+  const ipSel=$('#tcIp'); if(ipSel) ipSel.style.display='none';
   paintSaveFlag();
   const markBar=$('#tcMark');
   if(markBar) markBar.style.display=(canMarkDays() && !isCalOnly() && TC_VIEW==='team')?'':'none';
@@ -7923,10 +7918,88 @@ function printCalHtml(title, inner, opts){
 }
 function printTeamMonth(){
   if(isCalOnly()){ printTeamYear(); return; }
-  const node=$('#tcBody .tc-wrap');
-  if(!node){ toast('Nothing to print'); return; }
-  const title=$('#tcTitle')?$('#tcTitle').textContent:'Team';
-  printCalHtml('Team '+title, node.outerHTML, {flow:true});
+  printTeamYearPdf();
+}
+function monthGridHtml(year, month){
+  const names=teamCalNames();
+  const ym=year+'-'+String(month).padStart(2,'0');
+  const dim=new Date(year, month, 0).getDate();
+  const lab=new Date(year, month-1, 1).toLocaleString('en-GB',{month:'long', year:'numeric'});
+  let h='<h2>'+esc(lab)+'</h2><table class="tc"><thead><tr><th class="nm">Instructor</th>';
+  for(let day=1;day<=dim;day++){
+    const iso=ym+'-'+String(day).padStart(2,'0');
+    h+=`<th class="${isFeria(iso)?'wknd':''}">${day}</th>`;
+  }
+  h+='</tr></thead><tbody>';
+  names.forEach(name=>{
+    const role=roleOf(iftsMatchName(name))==='sim'?'SIM':'FLY';
+    h+=`<tr><td class="nm">${esc(name)} <span>${role}</span></td>`;
+    for(let day=1;day<=dim;day++){
+      const iso=ym+'-'+String(day).padStart(2,'0');
+      const eff=effectiveShift(name, iso, baseShiftOf(name, iso));
+      const bg=eff?codeColor(eff):'';
+      h+=`<td class="${isFeria(iso)?'wknd':''}" style="${bg?'background:'+bg+';color:#111':''}">${esc(eff||'')}</td>`;
+    }
+    h+='</tr>';
+  });
+  return h+'</tbody></table>';
+}
+function printTeamYearPdf(){
+  if(!TC_YM) TC_YM=isoToday().slice(0,7);
+  const year=+TC_YM.slice(0,4);
+  const names=teamCalNames();
+  const abs=new Set(['A','MED','ART28','104','MIX','CPL','IML','PL','NAF']);
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const absent=(name, m)=>{
+    const dim=new Date(year, m, 0).getDate();
+    let n=0;
+    for(let d=1;d<=dim;d++){
+      const iso=year+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+      const eff=effectiveShift(name, iso, baseShiftOf(name, iso));
+      if(abs.has(String(eff||'').toUpperCase())) n++;
+    }
+    return n;
+  };
+  const presence=(list, m)=>{
+    if(!list.length) return null;
+    const dim=new Date(year, m, 0).getDate();
+    let days=0, present=0;
+    for(let d=1;d<=dim;d++){
+      const iso=year+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+      if(isFeria(iso)) continue;
+      days++;
+      list.forEach(n=>{
+        const eff=effectiveShift(n, iso, baseShiftOf(n, iso));
+        if(!abs.has(String(eff||'').toUpperCase())) present++;
+      });
+    }
+    return days?Math.round(100*present/(list.length*days)):null;
+  };
+  const fly=names.filter(n=>roleOf(iftsMatchName(n))!=='sim');
+  const sim=names.filter(n=>roleOf(iftsMatchName(n))==='sim');
+  const now=new Date();
+  const stamp=now.toLocaleString('it-IT',{timeZone:'Europe/Rome', hour12:false});
+  let cover='<h1>ACS - Team Calendar</h1><p class="meta">'+year+' · Printed '+esc(stamp)+'</p>';
+  cover+='<table class="sum"><thead><tr><th class="nm">Instructor</th>'+months.map(m=>'<th>'+m+'</th>').join('')+'<th>Total</th></tr></thead><tbody>';
+  names.forEach(n=>{
+    const role=roleOf(iftsMatchName(n))==='sim'?'SIM':'FLY';
+    let tot=0;
+    cover+=`<tr><td class="nm">${esc(n)} <span>${role}</span></td>`;
+    for(let m=1;m<=12;m++){ const a=absent(n,m); tot+=a; cover+=`<td>${a||''}</td>`; }
+    cover+=`<td>${tot||''}</td></tr>`;
+  });
+  cover+='<tr><td class="nm">FLY presence %</td>';
+  for(let m=1;m<=12;m++){ const p=presence(fly,m); cover+=`<td>${p==null?'':p+'%'}</td>`; }
+  cover+='<td></td></tr><tr><td class="nm">SIM presence %</td>';
+  for(let m=1;m<=12;m++){ const p=presence(sim,m); cover+=`<td>${p==null?'':p+'%'}</td>`; }
+  cover+='<td></td></tr></tbody></table><p class="note">Absence days are A, MED, Art28, 104, MIX, CPL, IML, PL and NAF. Presence is the share of working days that are not an absence.</p>';
+  let pages='<section class="page cover">'+cover+'</section>';
+  for(let m=1;m<=12;m++) pages+='<section class="page">'+monthGridHtml(year, m)+'</section>';
+  const w=window.open('','_blank');
+  if(!w){ toast('Allow pop-ups to print'); return; }
+  w.document.write('<html><head><title>ACS - Team Calendar</title><style>@page{size:A4 landscape;margin:6mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#111}h1{font-size:22px;margin:0 0 4mm}h2{font-size:14px;margin:0 0 2mm}.meta,.note{font-size:10px;margin:0 0 4mm}.page{page-break-after:always}table{width:100%;border-collapse:collapse;font-size:7px}th,td{border:1px solid #bbb;padding:1px 2px;text-align:center}th.nm,td.nm{text-align:left;white-space:nowrap}td.wknd,th.wknd{background:#ececef}tbody tr:nth-child(even) td{background:#f4f4f6}</style></head><body>'+pages+'</body></html>');
+  w.document.close();
+  setTimeout(()=>{ w.focus(); w.print(); }, 250);
 }
 function printTeamYear(){
   if(!TC_YM) TC_YM=isoToday().slice(0,7);
