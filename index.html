@@ -190,7 +190,8 @@ tr.cx .stickcol{color:var(--danger)}
 .tl-tick i{position:absolute;top:18px;height:2000px;border-left:0.5px solid var(--line2)}
 .tl-bands{position:absolute;top:36px;bottom:0;left:268px;right:0;pointer-events:none;z-index:0}
 .tl-lunch-band{position:absolute;top:0;bottom:0;background:rgba(255,149,0,.07);border-left:1.5px dashed rgba(255,149,0,.4);border-right:1.5px dashed rgba(255,149,0,.4);pointer-events:none;z-index:0}
-.tl-dinner-band{position:absolute;top:0;bottom:0;background:rgba(175,82,222,.08);border-left:1.5px dashed rgba(175,82,222,.45);border-right:1.5px dashed rgba(175,82,222,.45);pointer-events:none;z-index:0}
+.tl-now{position:absolute;top:18px;bottom:0;width:0;border-left:1.5px solid #ff3b30;z-index:4;pointer-events:none}
+.tl-now i{position:absolute;top:-14px;left:-10px;font-style:normal;font-size:9px;font-weight:800;color:#ff3b30;background:#fff;padding:0 2px;border-radius:3px}
 .tl-leave{position:absolute;top:3px;height:20px;left:2%;width:96%;background:#e5e5ea;color:#3a3a3c;border-radius:6px;
   font-size:9px;font-weight:700;letter-spacing:.4px;display:flex;align-items:center;justify-content:center;z-index:1}
 html.dark .tl-leave{background:#3a3a3c;color:#d1d1d6}
@@ -2052,7 +2053,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.39';
+const APP_VERSION = '2.40';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return false; }
@@ -3387,6 +3388,23 @@ function timelineHTML(items, recId){
     if(!offDuty && shortOut) rawKinds.push('shortOut');
     if(!offDuty && longDuty) rawKinds.push('longDuty');
     if(weekHot) rawKinds.push(wKind);
+    const iso=rec?isoOfRec(rec):'';
+    const req=iso?latestReq(ip, iso, 'approved'):null;
+    const reqCode=req?String(req.code||'').toUpperCase():'';
+    const reqMin=(req && /^\d{2}:\d{2}$/.test(String(req.time||'')))?parseHHMM(req.time):null;
+    let nltOver=false, netEarly=false, outside=false;
+    if(!offDuty && reqMin!=null && reqCode==='NLT'){
+      if((lastE!=null && lastE>reqMin) || (win && win.exit!=null && win.exit>reqMin)) nltOver=true;
+    }
+    if(!offDuty && reqMin!=null && reqCode==='NET'){
+      if((firstS!=null && firstS<reqMin) || (win && win.show!=null && win.show<reqMin)) netEarly=true;
+    }
+    if(!offDuty && win && win.show!=null && win.exit!=null){
+      active.forEach(b=>{ if(b.s<win.show-1 || b.e>win.exit+1) outside=true; });
+    }
+    if(nltOver) rawKinds.push('nlt');
+    if(netEarly) rawKinds.push('net');
+    if(outside) rawKinds.push('outside');
     const liveKinds=rawKinds.filter(k=>!anomAccepted(recId, ip, k));
     const anomalies = liveKinds.length;
     if(ovPairs && liveKinds.includes('overlap')) ovCount++;
@@ -3419,7 +3437,9 @@ function timelineHTML(items, recId){
       const mix = (b.ev.MIX||'').trim();
       const hh = n=>String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0');
       const idxAttr = (b.idx!=null)?`data-idx="${b.idx}"`:'';
-      bar += `<div class="tl-blk ${TCLASS[typ]||''} ${cx?'cx':''} ${ov&&!cx?'ov':''}" ${idxAttr} `+
+      const outsideBlk = !offDuty && win && win.show!=null && win.exit!=null && (b.s<win.show-1 || b.e>win.exit+1);
+      const reqBad = reqMin!=null && ((reqCode==='NLT' && b.e>reqMin) || (reqCode==='NET' && b.s<reqMin));
+      bar += `<div class="tl-blk ${TCLASS[typ]||''} ${cx?'cx':''} ${ov&&!cx?'ov':''} ${(outsideBlk||reqBad)&&!cx?'ov':''}" ${idxAttr} `+
         `style="left:${pct(b.s)}%;width:${Math.max(pct(b.e)-pct(b.s),2)}%;${cx?'':'background:var(--'+(TCLASS[typ]||'strive')+')'}" `+
         `title="${esc(typ)} ${esc(mix)} ${hh(b.s)}–${hh(b.e)}${b.ev.AutoSlot?' · placed in a free gap (no start on the DFS)':''} · tap to edit"><small>${esc(typ)}</small>${esc(mix||'—')}</div>`;
     });
@@ -3430,6 +3450,9 @@ function timelineHTML(items, recId){
     if(shortOut) flags += `<span class="tl-flag ${accCls('shortOut')}" title="Less than ${mEnd} min from last activity to end of duty">out</span>`;
     if(longDuty) flags += `<span class="tl-flag ${accCls('longDuty')}" title="Duty window longer than ${(isFri?PREFS.dutyHoursFri:PREFS.dutyHoursMT)} h">${isFri?(PREFS.dutyHoursFri||6):(PREFS.dutyHoursMT||9)}h</span>`;
     if(weekHot) flags += `<span class="tl-flag ${accCls(wKind)}" title="Week ${roleEarly==='sim'?'student sims':'flights'} ${wTot} / max ${wLim}">wk</span>`;
+    if(nltOver) flags += `<span class="tl-flag ${accCls('nlt')}" title="Planned work ends after NLT ${req.time}z">NLT</span>`;
+    if(netEarly) flags += `<span class="tl-flag ${accCls('net')}" title="Planned work starts before NET ${req.time}z">NET</span>`;
+    if(outside) flags += `<span class="tl-flag ${accCls('outside')}" title="An event is outside the duty window">out</span>`;
     if(anomalies) flags += `<span class="tl-flag tl-anom" title="${liveKinds.join(', ')}">!${anomalies}</span>`;
     else if(!rawKinds.length) flags += `<span class="tl-flag ok" title="No overlaps · breaks OK">✓</span>`;
     if(rawKinds.length) flags += `<button type="button" class="tl-accept" data-ip="${esc(ip)}" data-kinds="${esc(rawKinds.join(','))}" title="${anomalies?'Accept and hide these alarms':'Undo accept'}">${anomalies?'OK':'undo'}</button>`;
@@ -3456,12 +3479,19 @@ function timelineHTML(items, recId){
     <div class="tl-sum-card ${weekOver?'warn':'ok'}"><b>${weekOver}</b><span>week MAX</span></div>
   </div>`;
 
+  const now=new Date();
+  const nowIso=now.getUTCFullYear()+'-'+String(now.getUTCMonth()+1).padStart(2,'0')+'-'+String(now.getUTCDate()).padStart(2,'0');
+  const todayIso=rec?isoOfRec(rec):'';
+  const nowMin=now.getUTCHours()*60+now.getUTCMinutes();
+  const showNow=todayIso && (todayIso===nowIso || todayIso===isoToday()) && nowMin>=T0 && nowMin<=T1;
+  const nowLine=showNow?`<div class="tl-now" style="left:calc(268px + (100% - 268px)*${pct(nowMin)/100})" title="Now ${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')}z"><i>${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')}z</i></div>`:'';
   return sum +
     `<div class="viewbar"><h2 class="sec" style="margin:0;flex:1">Duty timeline (UTC)</h2>`+
     `<div class="grp zoom"><button id="glZoomOut">−</button><button id="glZoomIn">+</button></div></div>`+
     `<p class="hint" style="margin-top:-4px">Blue bar = duty window. Orange = lunch, purple = dinner. Number = load. Tap a block to edit.</p>`+
     `<div class="timeline"><div class="tl-inner" style="min-width:${W}px;position:relative">`+
     lunchBand +
+    nowLine +
     `<div class="tl-axis">${ax}</div>`+
     `<div class="tl-row tl-headrow"><div class="tl-name"><span>IP</span><span>Shift</span><span>Ev</span><span>Alert</span></div><div class="tl-track"></div></div>`+
     `${rows}</div></div>`+
