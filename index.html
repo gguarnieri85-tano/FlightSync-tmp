@@ -3452,7 +3452,7 @@ function timelineHTML(items, recId){
     if(weekHot) flags += `<span class="tl-flag ${accCls(wKind)}" title="Week ${roleEarly==='sim'?'student sims':'flights'} ${wTot} / max ${wLim}">wk</span>`;
     if(nltOver) flags += `<span class="tl-flag ${accCls('nlt')}" title="Planned work ends after NLT ${req.time}z">NLT</span>`;
     if(netEarly) flags += `<span class="tl-flag ${accCls('net')}" title="Planned work starts before NET ${req.time}z">NET</span>`;
-    if(outside) flags += `<span class="tl-flag ${accCls('outside')}" title="An event is outside the duty window">out</span>`;
+    if(outside) flags += `<span class="tl-flag ${accCls('outside')}" title="An event is outside the duty window">win</span>`;
     if(anomalies) flags += `<span class="tl-flag tl-anom" title="${liveKinds.join(', ')}">!${anomalies}</span>`;
     else if(!rawKinds.length) flags += `<span class="tl-flag ok" title="No overlaps · breaks OK">✓</span>`;
     if(rawKinds.length) flags += `<button type="button" class="tl-accept" data-ip="${esc(ip)}" data-kinds="${esc(rawKinds.join(','))}" title="${anomalies?'Accept and hide these alarms':'Undo accept'}">${anomalies?'OK':'undo'}</button>`;
