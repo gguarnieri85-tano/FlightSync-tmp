@@ -1131,7 +1131,7 @@ html.dark .ifts .wknd,html.dark .c-off{background:#1c1c1e}
       <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted-t)">Flag ±<input type="number" id="balThr" min="5" max="200" step="5" style="width:56px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;font:inherit"> % from average</label>
     </div>
   </section>
-  <p class="legal" id="legalNote">This application was originally developed by Athanasios Gkioles and is continued by Gino Guarnieri for educational purposes only. All rights of authorship and distribution are reserved. Unauthorised copying, publication or commercial use is not permitted.</p>
+  <p class="legal" id="legalNote">This application was originally developed by Athanasios Gkioles and is continued by Gino Guarnieri for internal use only. All rights of authorship and distribution are reserved. Unauthorised copying, publication or commercial use is not permitted.</p>
   <div class="made">FlightSync <span id="appVerFoot">v1.3</span></div>
 </div>
 </div>
@@ -2053,7 +2053,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.43';
+const APP_VERSION = '2.44';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return false; }
@@ -5246,7 +5246,7 @@ function tmisPrintPdf(){
 '<h1>FlightSync · TMIS report</h1>'+
 '<p class="meta">'+esc(label)+' · '+esc(stamp)+' · v'+APP_VERSION+' · filtered selection · Flights (Own) from DFS</p>'+
 tables+
-'<p class="foot">Educational use. FlightSync — Athanasios Gkioles / Gino Guarnieri. Save as PDF, landscape.</p>'+
+'<p class="foot">Internal use only. FlightSync — Athanasios Gkioles / Gino Guarnieri. Save as PDF, landscape.</p>'+
 '</body></html>';
   try{
     let frame=$('#tmisPrintFrame');
