@@ -2053,7 +2053,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.42';
+const APP_VERSION = '2.43';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return false; }
@@ -5855,15 +5855,22 @@ function calendarRoster(){
 }
 async function loadCalendarOnly(){
   centerBusy('Calendar','Looking for the newest calendar…');
-  const n=await ingestFolderCalendars();
-  const info=lastCalIngest||{};
-  if(info.denied){ await centerDone(false,'Folder blocked','Allow this browser to read the app folder, then press Load newest.'); return 'none'; }
-  if(!n){
-    const why=info.seen?('Found '+info.seen+' calendar file'+(info.seen===1?'':'s')+' but could not read them.'):('No Calendardb file was found in '+(PREFS.folderLinkedName||'the linked folder')+'. Use App folder if those files are in another folder.');
-    await centerDone(false,'No calendar', why); return 'none';
-  }
-  try{ const dir=await idbGetHandle(); await pruneKept(dir, isCalendardbName, ''); }catch(e){}
-  await centerDone(true,'Calendar loaded','The newest calendar is loaded. This profile does not open or save the general Database.');
+  let dir=null;
+  try{ dir=await idbGetHandle(); }catch(e){}
+  const cal=dir?await readLatestCalendardb(dir):null;
+  if(!cal || !cal.obj){
+    const n=await ingestFolderCalendars();
+    const info=lastCalIngest||{};
+    if(info.denied){ await centerDone(false,'Folder blocked','Allow this browser to read the app folder, then press Load newest.'); return 'none'; }
+    if(!n){
+      const why=info.seen?('Found '+info.seen+' calendar file'+(info.seen===1?'':'s')+' but could not read them.'):('No Calendardb file was found in '+(PREFS.folderLinkedName||'the linked folder')+'. Use App folder if those files are in another folder.');
+      await centerDone(false,'No calendar', why); return 'none';
+    }
+  } else applyCalendardb(cal.obj, {replace:true});
+  TC_DIRTY=false;
+  paintSaveFlag();
+  try{ if(dir) await pruneKept(dir, isCalendardbName, ''); }catch(e){}
+  await centerDone(true,'Calendar loaded','The newest calendar is loaded. Unsaved changes from a previous session are not kept.');
   return 'loaded';
 }
 async function loadNewestPair(){
@@ -6025,12 +6032,13 @@ function mergeReqLists(base, incoming){
   });
   return bag;
 }
-function applyCalendardb(obj){
+function applyCalendardb(obj, opts){
   if(!obj || (obj.kind && obj.kind!=='calendardb')) return 0;
   if(!Array.isArray(obj.requests) && !obj.dayMarks && !Array.isArray(obj.ips)) return 0;
+  const replace=!!(opts&&opts.replace);
   const incoming=compactRequests(Array.isArray(obj.requests)?obj.requests:[]);
   const fileTs=obj.savedAt?Date.parse(obj.savedAt):0;
-  const keep=calRequests().filter(r=>r.status==='pending' && (r.ts||0)>(fileTs||0) && !incoming.some(x=>x.iso===r.iso && sameIp(x.ip, r.ip) && (x.ts||0)>=(r.ts||0)));
+  const keep=replace?[]:calRequests().filter(r=>r.status==='pending' && (r.ts||0)>(fileTs||0) && !incoming.some(x=>x.iso===r.iso && sameIp(x.ip, r.ip) && (x.ts||0)>=(r.ts||0)));
   PREFS.calReq=compactRequests(incoming.concat(keep));
   if(obj.dayMarks && typeof obj.dayMarks==='object') PREFS.dayMarks=obj.dayMarks;
   if(obj.monthLock && typeof obj.monthLock==='object') PREFS.monthLock=obj.monthLock;
@@ -8738,9 +8746,18 @@ if(refreshBtn) refreshBtn.onclick=async()=>{
 };
 const signOutBtn=$('#signOutBtn'); if(signOutBtn) signOutBtn.onclick=async()=>{
   if(pendingSave()){
-    const save=await centerAsk('Unsaved changes', pendingSave()==='calendar'?'The calendar has changes that are not saved.':'The Database has changes that are not saved.','Save','Leave');
+    const save=await centerAsk('Unsaved changes', pendingSave()==='calendar'?'The calendar has changes that are not saved. They will be discarded if you leave.':'The Database has changes that are not saved.','Save','Leave');
     if(save){ await saveFromFlag(); if(pendingSave()) return; }
-    else { TC_DIRTY=false; DB_DIRTY=false; paintSaveFlag(); }
+    else {
+      TC_DIRTY=false; DB_DIRTY=false; paintSaveFlag();
+      if(isCalOnly()){
+        try{
+          const dir=await idbGetHandle();
+          const cal=dir?await readLatestCalendardb(dir):null;
+          if(cal && cal.obj) applyCalendardb(cal.obj, {replace:true});
+        }catch(e){}
+      }
+    }
   }
   lockApp('');
 };
