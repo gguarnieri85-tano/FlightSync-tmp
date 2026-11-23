@@ -7997,6 +7997,7 @@ function individualYearHtml(year, name){
 }
 function openTcMenu(el){
   if(!isAdmin() && (el.dataset.iso||'')<=isoToday()){ toast('Only future dates'); return; }
+  if(isCalOnly() && italianHoliday(el.dataset.iso)){ toast('National holiday. No request on this day.'); return; }
   if(isCalOnly()){
     if(!TC_EDIT_IP || !sameIp(el.dataset.ip, TC_EDIT_IP)) return;
     const locked=latestReq(el.dataset.ip, el.dataset.iso, 'approved');
