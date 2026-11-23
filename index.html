@@ -2729,6 +2729,7 @@ function renderDay(){
   const body = $('#dayBody');
   if(!STATE.days.length){ body.innerHTML = emptyBlock('No schedules imported yet.'); return; }
   const id = $('#daySelect').value;
+  if(id && id!==DAY_ROLE_FOR){ PREFS.roleFilter='all'; DAY_ROLE_FOR=id; }
   const rec = STATE.days.find(r=>r.id===id);
   if(!rec){ body.innerHTML=''; return; }
   if(assignGradebookSlots(rec)){ try{ DB.put(rec); }catch(e){} }
