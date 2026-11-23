@@ -2053,7 +2053,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.48';
+const APP_VERSION = '2.49';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return false; }
@@ -7281,7 +7281,39 @@ function isWeekend(iso){
   const wd=new Date(y,m-1,d).getDay();
   return wd===0||wd===6;
 }
-function isFeria(iso){ return isWeekend(iso) || dayMark(iso)==='HOL'; }
+function easterSunday(year){
+  const a=year%19, b=Math.floor(year/100), c=year%100;
+  const d=Math.floor(b/4), e=b%4, f=Math.floor((b+8)/25);
+  const g=Math.floor((b-f+1)/3), h=(19*a+b-d-g+15)%30;
+  const i=Math.floor(c/4), k=c%4, l=(32+2*e+2*i-h-k)%7;
+  const m=Math.floor((a+11*h+22*l)/451);
+  const month=Math.floor((h+l-7*m+114)/31);
+  const day=((h+l-7*m+114)%31)+1;
+  return new Date(year, month-1, day);
+}
+function italianHoliday(iso){
+  if(!iso) return '';
+  const [y,m,d]=iso.split('-').map(Number);
+  const fixed={[1]:'Capodanno',[6]:'Epifania'};
+  const byMonth={
+    1:fixed,
+    4:{25:'Liberazione'},
+    5:{1:'Festa del Lavoro'},
+    6:{2:'Festa della Repubblica'},
+    8:{15:'Ferragosto'},
+    11:{1:'Ognissanti'},
+    12:{8:'Immacolata',25:'Natale',26:'Santo Stefano'}
+  };
+  if(byMonth[m] && byMonth[m][d]) return byMonth[m][d];
+  const easter=easterSunday(y);
+  const eIso=easter.getFullYear()+'-'+String(easter.getMonth()+1).padStart(2,'0')+'-'+String(easter.getDate()).padStart(2,'0');
+  const mon=new Date(easter); mon.setDate(easter.getDate()+1);
+  const monIso=mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
+  if(iso===eIso) return 'Pasqua';
+  if(iso===monIso) return 'Pasquetta';
+  return '';
+}
+function isFeria(iso){ return isWeekend(iso) || dayMark(iso)==='HOL' || !!italianHoliday(iso); }
 function isOffDay(iso){ return isFeria(iso) || dayMark(iso)==='NOFLY'; }
 function isNightDate(iso){
   if(!iso) return false;
@@ -7739,9 +7771,9 @@ function renderTeamCal(){
     const dt=new Date(yy,mm-1,day);
     const iso=TC_YM+'-'+String(day).padStart(2,'0');
     const wk=isFeria(iso)?' wknd feria':'';
-    const mk=dayMark(iso);
-    const headLab=isWeekend(iso)?'Feria':(mk==='HOL'?'Holiday':(mk?esc(markLab[mk]||''):''));
-    h+=`<th class="${wk}${iso===today?' today':''}" data-day="${iso}" title="${canEditCal()?'Tap to mark this day':''}">${day}<div class="dh">${headLab}</div></th>`;
+    const hol=italianHoliday(iso);
+    const headLab=isWeekend(iso)?'Feria':(hol|| (mk==='HOL'?'Holiday':(mk?esc(markLab[mk]||''):'')));
+    h+=`<th class="${wk}${iso===today?' today':''}" data-day="${iso}" title="${esc(hol|| (canEditCal()?'Tap to mark this day':''))}">${day}<div class="dh">${headLab}</div></th>`;
   }
   h+='</tr></thead><tbody>';
   const gridNames=(!isCalOnly() && TC_CAT!=='all')
