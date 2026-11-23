@@ -2053,7 +2053,7 @@ const DB = {
   })}
 };
 let STATE = { days: [], tmis: [] };
-const APP_VERSION = '2.50';
+const APP_VERSION = '2.51';
 const SUPABASE_URL = 'https://lykdmfseumcfvxbdwhhv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jzmQExLkmP2bEkEZS8QWpg_9Um7iRox';
 function cloudOn(){ return false; }
@@ -6514,6 +6514,7 @@ function proposeShift(name, iso, code, fromDistro, time){
   if(!leader && (iso||'')<=isoToday()){ toast('Only future dates'); return; }
   if(isCalOnly()){
     if(!TC_EDIT_IP || !sameIp(name, TC_EDIT_IP)){ toast('Choose your instructor first'); return; }
+    if(italianHoliday(iso)){ toast('National holiday. No request on this day.'); return; }
     const locked=latestReq(name, iso, 'approved');
     if(locked && String(locked.code||'').trim()){ toast('This day is already approved. Only the Team Leader can change it.'); return; }
     code=String(code||'').toUpperCase();
@@ -7876,6 +7877,7 @@ function bindTeamCalClicks(){
       return;
     }
     if(!isAdmin() && (el.dataset.iso||'')<=isoToday()){ toast('Only future dates'); return; }
+    if(isCalOnly() && italianHoliday(el.dataset.iso)){ toast('National holiday. No request on this day.'); return; }
     if(isCalOnly()){
       if(!TC_EDIT_IP || !sameIp(el.dataset.ip, TC_EDIT_IP)) return;
       const locked=latestReq(el.dataset.ip, el.dataset.iso, 'approved');
@@ -7970,16 +7972,18 @@ function individualYearHtml(year, name){
       if(tot[bucket]!=null) tot[bucket]++;
       if(pend) waiting++;
       if(hasAppr) approved++;
-      const hol=dayMark(iso)==='HOL';
+      const nat=italianHoliday(iso);
+      const hol=dayMark(iso)==='HOL' || !!nat;
       if(dow>=1 && dow<=5 && !hol && !abs.has(bucket)) presence++;
       const mk=dayMark(iso);
-      const lab2=mkName(mk);
+      const lab2=nat || mkName(mk);
       const dot=pend?'<i class="dot y" title="Waiting approval"></i>':(hasAppr?'<i class="dot g" title="Approved"></i>':'');
       const flag=(!pend && hasAppr)?' okd':'';
       const rej=rejectedReq(name, iso);
       const moon=mk==='NIGHT'?'☾':'';
       const gcal=show?('<a class="tc-gcal" href="'+gcalDayUrl(name, iso, codeLabel(show)||show, !!pend)+'" target="_blank" rel="noopener" title="Add this day to Google Calendar">G</a>'):'';
-      cells+='<div class="ios-cell tc-cell '+wk+today+' '+toneOf(show)+flag+'" data-ip="'+esc(name)+'" data-iso="'+iso+'" style="'+(show?'background:'+codeColor(show)+';color:#111':'')+'" title="'+esc(iso+' '+wdN[dow]+' '+(showLab||'')+(lab2?' '+lab2:'')+(rej?' rejected':''))+'"><span class="n">'+moon+d+'</span><span class="tc-wd">'+wdN[dow]+'</span>'+(show?'<span class="cd">'+esc(showLab)+'</span>':'')+(rej?'<span class="rej" title="Rejected. The day is clear. You can request again.">⚠</span>':'')+(lab2 && mk!=='NIGHT'?'<span class="tc-mk '+mk+'">'+esc(lab2)+'</span>':'')+dot+gcal+'</div>';
+      const feria=isFeria(iso)?' wknd':'';
+      cells+='<div class="ios-cell tc-cell '+wk+feria+today+' '+toneOf(show)+flag+'" data-ip="'+esc(name)+'" data-iso="'+iso+'" style="'+(show?'background:'+codeColor(show)+';color:#111':'')+'" title="'+esc(iso+' '+wdN[dow]+' '+(nat||showLab||'')+(lab2&&!nat?' '+lab2:'')+(rej?' rejected':''))+'"><span class="n">'+moon+d+'</span><span class="tc-wd">'+wdN[dow]+'</span>'+(nat?'<span class="tc-mk HOL">'+esc(nat)+'</span>':(show?'<span class="cd">'+esc(showLab)+'</span>':''))+(rej?'<span class="rej" title="Rejected. The day is clear. You can request again.">⚠</span>':'')+(lab2 && !nat && mk!=='NIGHT'?'<span class="tc-mk '+mk+'">'+esc(lab2)+'</span>':'')+dot+gcal+'</div>';
     }
     for(let i=first+dim;i<42;i++) cells+='<div class="ios-cell pad"></div>';
     months.push('<section class="ios-month'+(locked?' is-locked':'')+'"><div class="ios-mh">'+esc(lab)+(locked?' <span class="locktag">Locked</span>':'')+' <button type="button" class="lockbtn" data-lock="'+ym+'">'+lockGlyph(ym)+'</button></div><div class="ios-dow"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div><div class="ios-grid">'+cells+'</div></section>');
