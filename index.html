@@ -2229,7 +2229,7 @@ async function loadPrefs(){
     const sa = await DB.getSetting('silefAsOf'); if(typeof sa==='string') PREFS.silefAsOf = sa;
     const nw = await DB.getSetting('nightWeeks'); if(Array.isArray(nw)) PREFS.nightWeeks = nw;
     const dmarks = await DB.getSetting('dayMarks'); if(dmarks && typeof dmarks==='object' && !Array.isArray(dmarks)) PREFS.dayMarks = dmarks;
-    const ad = await DB.getSetting('aDelta'); if(ad && typeof ad==='object' && !Array.isArray(ad)) PREFS.aDelta = ad;
+    const adel = await DB.getSetting('aDelta'); if(adel && typeof adel==='object' && !Array.isArray(adel)) PREFS.aDelta = adel;
     const hlat = await DB.getSetting('homeLat'); if(typeof hlat==='number') PREFS.homeLat = hlat;
     const hlon = await DB.getSetting('homeLon'); if(typeof hlon==='number') PREFS.homeLon = hlon;
     const ifc = await DB.getSetting('iftsCal'); if(ifc && typeof ifc==='object') PREFS.iftsCal = ifc;
